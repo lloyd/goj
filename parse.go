@@ -1,4 +1,4 @@
-package main
+package goj
 
 import (
 	"errors"
@@ -70,43 +70,49 @@ func (p *Parser) end() bool {
 
 // XXX: rewrite in ASM
 func (p *Parser) skipSpace() {
+	offset := p.i
 outer:
-	for len(p.buf) > p.i {
-		switch p.buf[p.i] {
+	for len(p.buf) > offset {
+		switch p.buf[offset] {
 		case '\t', '\n', ' ':
-			p.i++
+			offset++
 		default:
 			break outer
 		}
 	}
+	p.i = offset
 }
 
 // XXX: rewrite in ASM
 func (p *Parser) skipNum() {
+	offset := p.i
 outer:
-	for len(p.buf) > p.i {
-		switch p.buf[p.i] {
+	for len(p.buf) > offset {
+		switch p.buf[offset] {
 		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			p.i++
+			offset++
 		default:
 			break outer
 		}
 	}
+	p.i = offset
 }
 
 // XXX: rewrite in ASM
 func (p *Parser) skipStringContent() {
+	offset := p.i
 skipping:
-	for len(p.buf) > p.i {
-		switch p.buf[p.i] {
+	for len(p.buf) > offset {
+		switch p.buf[offset] {
 		case '\\':
-			p.i += 2
+			offset += 2
 		case '"':
 			break skipping
 		default:
-			p.i++
+			offset++
 		}
 	}
+	p.i = offset
 }
 
 func (p *Parser) isNum() bool {
@@ -244,6 +250,7 @@ scan:
 					} else if p.buf[p.i] == '}' {
 						p.popState()
 						p.s = sValueEnd
+						p.cb(End, nil, nil)
 					} else {
 						return p.pError("1 unexpected character")
 					}
@@ -257,6 +264,7 @@ scan:
 					} else if p.buf[p.i] == ']' {
 						p.popState()
 						p.s = sValueEnd
+						p.cb(End, nil, nil)
 					} else {
 						return p.pError("2 unexpected character")
 					}
@@ -268,6 +276,9 @@ scan:
 		case sValue:
 			// eat whitespace
 			p.skipSpace()
+			if len(p.buf) <= p.i {
+				return p.pError("unexpected end of buffer")
+			}
 			switch p.buf[p.i] {
 			case '{':
 				depth++
@@ -297,6 +308,33 @@ scan:
 					p.restoreState()
 					p.send(Number, v)
 					p.s = sValueEnd
+				}
+			case 'n':
+				if len("null") < len(buf)-p.i && buf[p.i+1] == 'u' && buf[p.i+2] == 'l' && buf[p.i+3] == 'l' {
+					p.i += len("null")
+					p.restoreState()
+					p.send(Null, nil)
+					p.s = sValueEnd
+				} else {
+					return p.pError("unexpected character")
+				}
+			case 't':
+				if len("true") < len(buf)-p.i && buf[p.i+1] == 'r' && buf[p.i+2] == 'u' && buf[p.i+3] == 'e' {
+					p.i += len("true")
+					p.restoreState()
+					p.send(True, nil)
+					p.s = sValueEnd
+				} else {
+					return p.pError("unexpected character")
+				}
+			case 'f':
+				if len("false") < len(buf)-p.i && buf[p.i+1] == 'a' && buf[p.i+2] == 'l' && buf[p.i+3] == 's' && buf[p.i+4] == 'e' {
+					p.i += len("false")
+					p.restoreState()
+					p.send(False, nil)
+					p.s = sValueEnd
+				} else {
+					return p.pError("unexpected character")
 				}
 			default:
 				return p.pError("3 unexpected character")

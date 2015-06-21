@@ -6,15 +6,17 @@ import (
 	"io"
 	"os"
 	"runtime"
-	//	"runtime/pprof"
+	"runtime/pprof"
 	"time"
+
+	"github.com/lloyd/goj"
 )
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	fname := fmt.Sprintf("query_%d.prof", os.Getpid())
-	_, err := os.Create(fname)
+	f, err := os.Create(fname)
 	if err != nil {
 		fmt.Printf("fatal: %s\n", err)
 		return
@@ -25,18 +27,18 @@ func main() {
 	start := time.Now()
 	numRead := 0
 
-	//	pprof.StartCPUProfile(f)
-	parser := NewParser()
+	pprof.StartCPUProfile(f)
+	parser := goj.NewParser()
 	InPlaceReadLine(os.Stdin, func(line []byte, lineNum int64, offset int64) error {
-		err := parser.Parse(line, func(t Type, k []byte, v []byte) bool {
+		err := parser.Parse(line, func(t goj.Type, k []byte, v []byte) bool {
 			switch t {
-			case True:
-			case False:
-			case Null:
-			case String:
-			case Array:
-			case Object:
-			case End:
+			case goj.True:
+			case goj.False:
+			case goj.Null:
+			case goj.String:
+			case goj.Array:
+			case goj.Object:
+			case goj.End:
 			}
 			//fmt.Printf("got %s [%s] -> '%s'\n", t, string(k), string(v))
 			return true
@@ -50,7 +52,7 @@ func main() {
 		numRead++
 		return nil
 	})
-	//	pprof.StopCPUProfile()
+	pprof.StopCPUProfile()
 
 	fmt.Printf("%d read in %s\n", numRead, time.Since(start).String())
 }
