@@ -73,7 +73,6 @@ func getTests() []*parseTestCase {
 		if err != nil {
 			panic(fmt.Sprintf("Couldn't read %s: %s", p, err))
 		}
-		contents = []byte(strings.TrimSpace(string(contents)))
 
 		if ext == ".json" {
 			c.json = string(contents)
@@ -127,6 +126,8 @@ func testParse(json string) (results string) {
 		case goj.Object:
 			results += "map open '{'\n"
 			stack = append(stack, false)
+		case goj.Number:
+			results += fmt.Sprintf("number '%s'\n", v)
 		case goj.End:
 			last := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
@@ -152,12 +153,14 @@ func TestParser(t *testing.T) {
 	for _, c := range cases {
 		results := testParse(c.json)
 
-		if results != c.gold {
+		want := strings.TrimRight(c.gold, "\n")
+		got := strings.TrimRight(results, "\n")
+		if got != want {
 			errText := ""
-			for _, s := range strings.Split(c.gold, "\n") {
+			for _, s := range strings.Split(want, "\n") {
 				errText += "- " + s + "\n"
 			}
-			for _, s := range strings.Split(results, "\n") {
+			for _, s := range strings.Split(got, "\n") {
 				errText += "+ " + s + "\n"
 			}
 			t.Errorf("%s:\n%s\n", c.name, errText)

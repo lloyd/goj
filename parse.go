@@ -103,13 +103,28 @@ func (p *Parser) skipStringContent() {
 	offset := p.i
 skipping:
 	for len(p.buf) > offset {
-		switch p.buf[offset] {
+		c := p.buf[offset]
+		switch c {
 		case '\\':
-			offset += 2
+			offset++
+			switch p.buf[offset] {
+			case 't', 'n', 'r', '\\', '/', 'b', 'f', '"':
+				offset++
+			case 'u':
+				// XXX: handle this
+				offset += 4
+			default:
+				// bogus escape
+				break skipping
+			}
 		case '"':
 			break skipping
 		default:
-			offset++
+			if c >= 0x20 {
+				offset++
+			} else {
+				break skipping
+			}
 		}
 	}
 	p.i = offset
@@ -126,16 +141,17 @@ func (p *Parser) isNum() bool {
 
 // XXX: how do we handle end of buffer
 func (p *Parser) readString() ([]byte, error) {
-	if p.buf[p.i] != '"' {
+	buf := p.buf
+	if buf[p.i] != '"' {
 		return nil, p.pError("string expected '\"'")
 	}
 	p.i++
 	start := p.i
 	p.skipStringContent()
-	if len(p.buf) > p.i && p.buf[p.i] != '"' {
+	if len(buf) > p.i && buf[p.i] != '"' {
 		return nil, p.pError("closing '\"' expected")
 	}
-	bs := p.buf[start:p.i]
+	bs := buf[start:p.i]
 	p.i++
 	return bs, nil
 }
@@ -148,7 +164,7 @@ func (p *Parser) readNumber() ([]byte, error) {
 		case '-':
 			p.i++
 			if len(p.buf) <= p.i || !p.isNum() {
-				return nil, p.pError("number expected")
+				return nil, p.pError("malformed number, a digit is required after the minus sign")
 			}
 			p.skipNum()
 		case '0':
@@ -206,9 +222,13 @@ func (p *Parser) restoreState() {
 
 func (p *Parser) send(t Type, v []byte) {
 	var k []byte
-	if len(p.states) > 0 && p.states[len(p.states)-1] == sObject {
-		k = p.keystack[len(p.keystack)-1]
-		p.keystack = p.keystack[:len(p.keystack)-1]
+	states := p.states
+	slen := len(states)
+	if slen > 0 && states[slen-1] == sObject {
+		keystack := p.keystack
+		off := len(keystack) - 1
+		k = keystack[off]
+		p.keystack = keystack[:off]
 	}
 	p.cb(t, k, v)
 }
@@ -234,7 +254,7 @@ func (p *Parser) Parse(buf []byte, cb Callback) error {
 	depth := 0
 
 scan:
-	for len(p.buf) > p.i {
+	for len(buf) > p.i {
 		switch p.s {
 		case sValueEnd:
 			if len(p.states) == 0 {
@@ -243,11 +263,11 @@ scan:
 				switch p.states[len(p.states)-1] {
 				case sObject:
 					p.skipSpace()
-					if len(p.buf) <= p.i {
+					if len(buf) <= p.i {
 						return p.pError("premature end")
-					} else if p.buf[p.i] == ',' {
+					} else if buf[p.i] == ',' {
 						p.s = sObject
-					} else if p.buf[p.i] == '}' {
+					} else if buf[p.i] == '}' {
 						p.popState()
 						p.s = sValueEnd
 						p.cb(End, nil, nil)
@@ -257,11 +277,11 @@ scan:
 					p.i++
 				case sArray:
 					p.skipSpace()
-					if len(p.buf) <= p.i {
+					if len(buf) <= p.i {
 						return p.pError("premature end")
-					} else if p.buf[p.i] == ',' {
+					} else if buf[p.i] == ',' {
 						p.s = sValue
-					} else if p.buf[p.i] == ']' {
+					} else if buf[p.i] == ']' {
 						p.popState()
 						p.s = sValueEnd
 						p.cb(End, nil, nil)
@@ -276,10 +296,10 @@ scan:
 		case sValue:
 			// eat whitespace
 			p.skipSpace()
-			if len(p.buf) <= p.i {
+			if len(buf) <= p.i {
 				return p.pError("unexpected end of buffer")
 			}
-			switch p.buf[p.i] {
+			switch buf[p.i] {
 			case '{':
 				depth++
 				p.i++
@@ -341,16 +361,16 @@ scan:
 			}
 		case sObject:
 			p.skipSpace()
-			if len(p.buf) <= p.i {
+			if len(buf) <= p.i {
 				return p.pError("premature end")
-			} else if p.buf[p.i] == '}' {
+			} else if buf[p.i] == '}' {
 				p.popState()
 				p.s = sValueEnd
 			} else if k, err := p.readString(); err != nil {
 				return err
 			} else {
 				p.skipSpace()
-				if len(p.buf) <= p.i || p.buf[p.i] != ':' {
+				if len(buf) <= p.i || buf[p.i] != ':' {
 					return p.pError("expected ':' to separate key and value")
 				}
 				p.i++

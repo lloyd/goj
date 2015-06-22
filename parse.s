@@ -1,0 +1,7 @@
+TEXT ·hasAsm(SB),4,$0
+MOVQ $1, AX
+CPUID
+SHRQ $23, CX
+ANDQ $1, CX
+MOVB CX, ret+0(FP)
+RET
