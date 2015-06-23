@@ -19,6 +19,13 @@ const (
 	End
 )
 
+func hasAsm() bool
+func countSlice(s []uint64) int
+func findStrRange(r []byte, s []byte) int
+func scanNumberChars(s []byte, offset int) int
+func scanNonSpecialStringChars(s []byte, offset int) int
+func scanWhitespaceChars(s []byte, offset int) int
+
 func (t Type) String() string {
 	switch t {
 	case Bool:
@@ -68,7 +75,7 @@ func (p *Parser) end() bool {
 	return p.i >= len(p.buf)
 }
 
-// XXX: rewrite in ASM
+// Note : an ASM version has more overhead for terse json documents.
 func (p *Parser) skipSpace() {
 	offset := p.i
 outer:
@@ -83,31 +90,23 @@ outer:
 	p.i = offset
 }
 
-// XXX: rewrite in ASM
-func (p *Parser) skipNum() {
-	offset := p.i
-outer:
-	for len(p.buf) > offset {
-		switch p.buf[offset] {
-		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			offset++
-		default:
-			break outer
-		}
+func (p *Parser) readString() ([]byte, error) {
+	buf := p.buf
+	if buf[p.i] != '"' {
+		return nil, p.pError("string expected '\"'")
 	}
-	p.i = offset
-}
-
-// XXX: rewrite in ASM
-func (p *Parser) skipStringContent() {
+	p.i++
+	start := p.i
 	offset := p.i
+
 skipping:
-	for len(p.buf) > offset {
-		c := p.buf[offset]
+	for len(buf) > offset {
+		offset += scanNonSpecialStringChars(buf, offset)
+		c := buf[offset]
 		switch c {
 		case '\\':
 			offset++
-			switch p.buf[offset] {
+			switch buf[offset] {
 			case 't', 'n', 'r', '\\', '/', 'b', 'f', '"':
 				offset++
 			case 'u':
@@ -127,33 +126,12 @@ skipping:
 			}
 		}
 	}
-	p.i = offset
-}
 
-func (p *Parser) isNum() bool {
-	switch p.buf[p.i] {
-	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-		return true
-	default:
-		return false
+	if len(buf) > offset && buf[offset] != '"' {
+		return nil, p.pError("unterminated string found")
 	}
-}
-
-// XXX: how do we handle end of buffer
-func (p *Parser) readString() ([]byte, error) {
-	buf := p.buf
-	if buf[p.i] != '"' {
-		return nil, p.pError("string expected '\"'")
-	}
-	p.i++
-	start := p.i
-	p.skipStringContent()
-	if len(buf) > p.i && buf[p.i] != '"' {
-		return nil, p.pError("closing '\"' expected")
-	}
-	bs := buf[start:p.i]
-	p.i++
-	return bs, nil
+	p.i = offset + 1
+	return buf[start:offset], nil
 }
 
 func (p *Parser) readNumber() ([]byte, error) {
@@ -163,24 +141,26 @@ func (p *Parser) readNumber() ([]byte, error) {
 		switch p.buf[p.i] {
 		case '-':
 			p.i++
-			if len(p.buf) <= p.i || !p.isNum() {
+			x := scanNumberChars(p.buf, p.i)
+			if x == 0 {
 				return nil, p.pError("malformed number, a digit is required after the minus sign")
 			}
-			p.skipNum()
+			p.i += x
 		case '0':
 			p.i++
 		case '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			p.skipNum()
+			p.i += scanNumberChars(p.buf, p.i)
 		}
 		if p.i == start {
 			return nil, p.pError("number expected")
 		}
 		if len(p.buf) > p.i && p.buf[p.i] == '.' {
 			p.i++
-			if !p.isNum() {
+			x := scanNumberChars(p.buf, p.i)
+			if x == 0 {
 				return nil, p.pError("digit expected after decimal point")
 			}
-			p.skipNum()
+			p.i += x
 		}
 
 		// now handle scentific notation suffix
@@ -384,4 +364,9 @@ scan:
 	}
 
 	return nil
+}
+
+func Testy() int {
+	return scanNumberChars(
+		[]byte("123456789  non number"), 11)
 }
