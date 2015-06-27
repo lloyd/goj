@@ -366,8 +366,6 @@ scan:
 				p.i++
 				p.send(Array, nil)
 				p.pushState(sArray)
-				// skip straight to parsing the first value
-				p.s = sValue
 			case '"':
 				if v, err := p.readString(); err != nil {
 					return err
@@ -415,6 +413,18 @@ scan:
 			default:
 				return p.pError("3 unexpected character")
 			}
+		case sArray:
+			p.skipSpace()
+			if len(buf) <= p.i {
+				return p.pError("premature EOF")
+			} else if buf[p.i] == ']' {
+				p.i++
+				p.popState()
+				p.s = sValueEnd
+				p.cb(End, nil, nil)
+			} else {
+				p.s = sValue
+			}
 		case sObject:
 			p.skipSpace()
 			if len(buf) <= p.i {
@@ -444,9 +454,4 @@ scan:
 		return p.pError("trailing garbage")
 	}
 	return nil
-}
-
-func Testy() int {
-	return scanNumberChars(
-		[]byte("123456789  non number"), 11)
 }
