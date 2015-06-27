@@ -1,8 +1,9 @@
 package goj
 
 import (
-	"errors"
 	"fmt"
+	"strconv"
+	"unicode/utf8"
 )
 
 type Type uint8
@@ -98,6 +99,13 @@ func (p *Parser) readString() ([]byte, error) {
 	p.i++
 	start := p.i
 	offset := p.i
+	cooked := []byte{}
+	addToCooked := func(r rune) {
+		er := make([]byte, 4, 4)
+		x := utf8.EncodeRune(er, r)
+		cooked = append(cooked, buf[start:offset-1]...)
+		cooked = append(cooked, er[:x]...)
+	}
 
 skipping:
 	for len(buf) > offset {
@@ -107,14 +115,49 @@ skipping:
 		case '\\':
 			offset++
 			switch buf[offset] {
-			case 't', 'n', 'r', '\\', '/', 'b', 'f', '"':
+			case '\\', '/', '"':
+				addToCooked(rune(buf[offset]))
 				offset++
+				start = offset
+			case 't':
+				addToCooked('\t')
+				offset++
+				start = offset
+			case 'n':
+				addToCooked('\n')
+				offset++
+				start = offset
+			case 'r':
+				addToCooked('\r')
+				offset++
+				start = offset
+			case 'b':
+				addToCooked('\b')
+				offset++
+				start = offset
+			case 'f':
+				addToCooked('\f')
+				offset++
+				start = offset
 			case 'u':
-				// XXX: handle this
-				offset += 4
+				offset++
+				if len(buf)-offset < 4 {
+					return nil, p.pError("unexpected EOF after '\\u'")
+				} else {
+					r, err := strconv.ParseInt(string(buf[offset:offset+4]), 16, 0)
+					if err != nil {
+						return nil, p.pError("invalid (non-hex) character occurs after '\\u' inside string.")
+					}
+					offset--
+					addToCooked(rune(r))
+					offset += 5
+					start = offset
+				}
+
 			default:
 				// bogus escape
-				break skipping
+				p.i += offset
+				return nil, p.pError("inside a string, '\\' occurs before a character which it may not")
 			}
 		case '"':
 			break skipping
@@ -122,7 +165,8 @@ skipping:
 			if c >= 0x20 {
 				offset++
 			} else {
-				break skipping
+				p.i += offset
+				return nil, p.pError("invalid character inside string")
 			}
 		}
 	}
@@ -131,7 +175,11 @@ skipping:
 		return nil, p.pError("unterminated string found")
 	}
 	p.i = offset + 1
-	return buf[start:offset], nil
+	if len(cooked) > 0 {
+		return append(cooked, buf[start:offset]...), nil
+	} else {
+		return buf[start:offset], nil
+	}
 }
 
 func (p *Parser) readNumber() ([]byte, error) {
@@ -164,18 +212,46 @@ func (p *Parser) readNumber() ([]byte, error) {
 		}
 
 		// now handle scentific notation suffix
-		// XXX
+		if len(p.buf) > p.i && (p.buf[p.i] == 'e' || p.buf[p.i] == 'E') {
+			p.i++
+			if len(p.buf) > p.i && (p.buf[p.i] == '-' || p.buf[p.i] == '+') {
+				p.i++
+			}
+			x := scanNumberChars(p.buf, p.i)
+			if x == 0 {
+				return nil, p.pError("digits expected after exponent marker (e)")
+			}
+			p.i += x
+
+		}
 	}
 	return p.buf[start:p.i], nil
 }
 
-func (p *Parser) pError(es string) error {
-	err := string(p.buf[p.i:])
+type GojError struct {
+	e      string
+	buf    []byte
+	offset int
+}
+
+func (e *GojError) Error() string {
+	return e.e
+}
+
+func (e *GojError) Verbose() string {
+	err := string(e.buf[e.offset:])
 	if len(err) > 20 {
 		err = err[0:20] + "..."
 	}
-	es += fmt.Sprintf(" at '%s' (%v)", err, p.s)
-	return errors.New(es)
+	return e.e + fmt.Sprintf(" at '%s' (%v)", err, e.e)
+}
+
+func (p *Parser) pError(es string) error {
+	return &GojError{
+		e:      es,
+		buf:    p.buf,
+		offset: p.i,
+	}
 }
 
 func (p *Parser) pushState(ns state) {
@@ -244,7 +320,7 @@ scan:
 				case sObject:
 					p.skipSpace()
 					if len(buf) <= p.i {
-						return p.pError("premature end")
+						return p.pError("premature EOF")
 					} else if buf[p.i] == ',' {
 						p.s = sObject
 					} else if buf[p.i] == '}' {
@@ -258,7 +334,7 @@ scan:
 				case sArray:
 					p.skipSpace()
 					if len(buf) <= p.i {
-						return p.pError("premature end")
+						return p.pError("premature EOF")
 					} else if buf[p.i] == ',' {
 						p.s = sValue
 					} else if buf[p.i] == ']' {
@@ -346,6 +422,7 @@ scan:
 			} else if buf[p.i] == '}' {
 				p.popState()
 				p.s = sValueEnd
+				p.cb(End, nil, nil)
 			} else if k, err := p.readString(); err != nil {
 				return err
 			} else {
@@ -362,7 +439,10 @@ scan:
 			return p.pError(fmt.Sprintf("hit unimplemented state: %s", p.s))
 		}
 	}
-
+	p.skipSpace()
+	if !p.end() {
+		return p.pError("trailing garbage")
+	}
 	return nil
 }
 

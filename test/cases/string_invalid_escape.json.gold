@@ -1,3 +1,4 @@
 array open '['
-lexical error: inside a string, '\' occurs before a character which it may not.
+parse error: inside a string, '\' occurs before a character which it may not
+
 
