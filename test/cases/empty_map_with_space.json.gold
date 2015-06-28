@@ -1,0 +1,7 @@
+map open '{'
+key: 'address'
+map open '{'
+map close '}'
+key: 'score'
+integer: 0
+map close '}'

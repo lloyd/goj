@@ -463,6 +463,7 @@ scan:
 			if len(buf) <= p.i {
 				return p.pError("premature end")
 			} else if buf[p.i] == '}' {
+				p.i++
 				p.popState()
 				p.s = sValueEnd
 				p.cb(End, nil, nil)
