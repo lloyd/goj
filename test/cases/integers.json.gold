@@ -7,8 +7,8 @@ integer: 5
 integer: 6
 integer: 7
 integer: 123456789
-integer: -123456789
+negative integer: -123456789
 integer: 2147483647
-integer: -2147483647
+negative integer: -2147483647
 array close ']'
 

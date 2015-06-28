@@ -11,7 +11,9 @@ type Type uint8
 const (
 	Bool Type = iota
 	String
-	Number
+	Integer
+	NegInteger
+	Float
 	True
 	False
 	Null
@@ -33,8 +35,12 @@ func (t Type) String() string {
 		return "bool"
 	case String:
 		return "string"
-	case Number:
-		return "number"
+	case Integer:
+		return "integer"
+	case NegInteger:
+		return "negative integer"
+	case Float:
+		return "float"
 	case True:
 		return "true"
 	case False:
@@ -110,6 +116,9 @@ func (p *Parser) readString() ([]byte, error) {
 skipping:
 	for len(buf) > offset {
 		offset += scanNonSpecialStringChars(buf, offset)
+		if len(buf) <= offset {
+			break
+		}
 		c := buf[offset]
 		switch c {
 		case '\\':
@@ -182,16 +191,18 @@ skipping:
 	}
 }
 
-func (p *Parser) readNumber() ([]byte, error) {
+func (p *Parser) readNumber() ([]byte, Type, error) {
 	start := p.i
+	t := Integer
 
 	if len(p.buf) > p.i {
 		switch p.buf[p.i] {
 		case '-':
+			t = NegInteger
 			p.i++
 			x := scanNumberChars(p.buf, p.i)
 			if x == 0 {
-				return nil, p.pError("malformed number, a digit is required after the minus sign")
+				return nil, t, p.pError("malformed number, a digit is required after the minus sign")
 			}
 			p.i += x
 		case '0':
@@ -200,32 +211,34 @@ func (p *Parser) readNumber() ([]byte, error) {
 			p.i += scanNumberChars(p.buf, p.i)
 		}
 		if p.i == start {
-			return nil, p.pError("number expected")
+			return nil, t, p.pError("number expected")
 		}
 		if len(p.buf) > p.i && p.buf[p.i] == '.' {
+			t = Float
 			p.i++
 			x := scanNumberChars(p.buf, p.i)
 			if x == 0 {
-				return nil, p.pError("digit expected after decimal point")
+				return nil, t, p.pError("digit expected after decimal point")
 			}
 			p.i += x
 		}
 
 		// now handle scentific notation suffix
 		if len(p.buf) > p.i && (p.buf[p.i] == 'e' || p.buf[p.i] == 'E') {
+			t = Float
 			p.i++
 			if len(p.buf) > p.i && (p.buf[p.i] == '-' || p.buf[p.i] == '+') {
 				p.i++
 			}
 			x := scanNumberChars(p.buf, p.i)
 			if x == 0 {
-				return nil, p.pError("digits expected after exponent marker (e)")
+				return nil, t, p.pError("digits expected after exponent marker (e)")
 			}
 			p.i += x
 
 		}
 	}
-	return p.buf[start:p.i], nil
+	return p.buf[start:p.i], t, nil
 }
 
 type GojError struct {
@@ -328,7 +341,7 @@ scan:
 						p.s = sValueEnd
 						p.cb(End, nil, nil)
 					} else {
-						return p.pError("1 unexpected character")
+						return p.pError("after key and value, inside map, I expect ',' or '}'")
 					}
 					p.i++
 				case sArray:
@@ -376,11 +389,11 @@ scan:
 					p.s = sValueEnd
 				}
 			case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-				if v, err := p.readNumber(); err != nil {
+				if v, t, err := p.readNumber(); err != nil {
 					return err
 				} else {
 					p.restoreState()
-					p.send(Number, v)
+					p.send(t, v)
 					p.s = sValueEnd
 				}
 			case 'n':
@@ -390,7 +403,7 @@ scan:
 					p.send(Null, nil)
 					p.s = sValueEnd
 				} else {
-					return p.pError("unexpected character")
+					return p.pError("invalid string in json text.")
 				}
 			case 't':
 				if len("true") < len(buf)-p.i && buf[p.i+1] == 'r' && buf[p.i+2] == 'u' && buf[p.i+3] == 'e' {
@@ -399,7 +412,7 @@ scan:
 					p.send(True, nil)
 					p.s = sValueEnd
 				} else {
-					return p.pError("unexpected character")
+					return p.pError("invalid string in json text.")
 				}
 			case 'f':
 				if len("false") < len(buf)-p.i && buf[p.i+1] == 'a' && buf[p.i+2] == 'l' && buf[p.i+3] == 's' && buf[p.i+4] == 'e' {
@@ -408,10 +421,10 @@ scan:
 					p.send(False, nil)
 					p.s = sValueEnd
 				} else {
-					return p.pError("unexpected character")
+					return p.pError("invalid string in json text.")
 				}
 			default:
-				return p.pError("3 unexpected character")
+				return p.pError("unallowed token at this point in JSON text")
 			}
 		case sArray:
 			p.skipSpace()

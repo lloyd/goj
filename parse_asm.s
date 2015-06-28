@@ -29,6 +29,8 @@ TEXT ·scanNumberChars(SB),4,$0-40
     // thats (x + 15) >> 4
 	MOVQ s+8(FP), AX
     SUBQ BX, AX
+    // save off number of bytes
+    MOVQ AX, DX
     ADDQ $15, AX
     SHRQ $4, AX
 
@@ -50,7 +52,7 @@ scanNumberCharsLoop:
     JNZ scanNumberCharsLoop
 
 scanNumberCharsEnd:
-    MOVQ $0, ret+32(FP)
+    MOVQ DX, ret+32(FP)
     RET
 
 scanNumberCharsFound:
@@ -74,6 +76,8 @@ TEXT ·scanNonSpecialStringChars(SB),4,$0-40
     // thats (x + 15) >> 4
 	MOVQ s+8(FP), AX
     SUBQ BX, AX
+    // save off number of bytes
+    MOVQ AX, DX
     ADDQ $15, AX
     SHRQ $4, AX
 
@@ -95,7 +99,7 @@ scanNonSpecialStringCharsLoop:
     JNZ scanNonSpecialStringCharsLoop
 
 scanNonSpecialStringCharsEnd:
-    MOVQ $0, ret+32(FP)
+    MOVQ DX, ret+32(FP)
     RET
 
 scanNonSpecialStringCharsFound:
@@ -122,6 +126,7 @@ TEXT ·scanWhitespaceChars(SB),4,$0-40
     // thats (x + 15) >> 4
 	MOVQ s+8(FP), AX
     SUBQ BX, AX
+    MOVQ AX, DX
     ADDQ $15, AX
     SHRQ $4, AX
 
@@ -143,7 +148,7 @@ scanWhitespaceCharsLoop:
     JNZ scanWhitespaceCharsLoop
 
 scanWhitespaceCharsEnd:
-    MOVQ $0, ret+32(FP)
+    MOVQ DX, ret+32(FP)
     RET
 
 scanWhitespaceCharsFound:

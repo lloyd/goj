@@ -1,2 +1,1 @@
-lexical error: malformed number, a digit is required after the decimal point.
-
+parse error: digit expected after decimal point

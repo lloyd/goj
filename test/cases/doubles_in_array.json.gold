@@ -1,8 +1,8 @@
 array open '['
-double: 0.00012
-double: 6e-06
-double: 6e-06
-double: 1e-06
-double: 1e-06
+float: 0.00011999999999999999
+float: 6E-06
+float: 6E-06
+float: 1E-06
+float: 1E-06
 array close ']'
 

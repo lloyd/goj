@@ -1,7 +1,6 @@
 array open '['
-double: 10
-double: 10
-double: 3.14157
-double: 1000
+float: 0.1e2
+float: 1e1
+float: 3.141569
+float: 10000000000000e-10
 array close ']'
-

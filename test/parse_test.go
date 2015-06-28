@@ -126,8 +126,8 @@ func testParse(json string) (results string) {
 		case goj.Object:
 			results += "map open '{'\n"
 			stack = append(stack, false)
-		case goj.Number:
-			results += fmt.Sprintf("number '%s'\n", v)
+		case goj.Integer, goj.NegInteger, goj.Float:
+			results += fmt.Sprintf("%s: %s\n", t.String(), v)
 		case goj.End:
 			last := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
