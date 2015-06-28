@@ -107,7 +107,7 @@ func (p *Parser) readString() ([]byte, error) {
 	offset := p.i
 	cooked := []byte{}
 	addToCooked := func(r rune) {
-		er := make([]byte, 4, 4)
+		er := make([]byte, 5, 5)
 		x := utf8.EncodeRune(er, r)
 		cooked = append(cooked, buf[start:offset-1]...)
 		cooked = append(cooked, er[:x]...)
@@ -158,8 +158,28 @@ skipping:
 						return nil, p.pError("invalid (non-hex) character occurs after '\\u' inside string.")
 					}
 					offset--
+					// is this a utf16 surrogate marker?
+					surrogateSize := 0
+					if (r & 0xFC00) == 0xD800 {
+						// point just past end of first
+						toff := offset + 5
+						// enough buffer for second utf16 codepoint?
+						if len(buf) <= (toff + 6) {
+							r = '?' // not enough buffer
+						} else if buf[toff] != '\\' || buf[toff+1] != 'u' {
+							r = '?' // surrogate marker not followed by codepoint
+						} else {
+							surrogate, err := strconv.ParseInt(string(buf[toff+2:toff+6]), 16, 0)
+							if err != nil {
+								r = '?' // invalid hex in second member of pair
+							} else {
+								surrogateSize = 6
+								r = (((r & 0x3F) << 10) | ((((r >> 6) & 0xF) + 1) << 16) | (surrogate & 0x3FF))
+							}
+						}
+					}
 					addToCooked(rune(r))
-					offset += 5
+					offset += 5 + surrogateSize
 					start = offset
 				}
 
