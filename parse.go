@@ -310,16 +310,18 @@ func (p *Parser) restoreState() {
 }
 
 func (p *Parser) send(t Type, v []byte) {
-	var k []byte
 	states := p.states
 	slen := len(states)
 	if slen > 0 && states[slen-1] == sObject {
 		keystack := p.keystack
 		off := len(keystack) - 1
-		k = keystack[off]
+		k := keystack[off]
 		p.keystack = keystack[:off]
+		p.cb(t, k, v)
+	} else {
+		p.cb(t, nil, v)
 	}
-	p.cb(t, k, v)
+
 }
 
 func NewParser() *Parser {
