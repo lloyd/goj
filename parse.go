@@ -180,7 +180,7 @@ skipping:
 		}
 	}
 
-	if len(buf) > offset && buf[offset] != '"' {
+	if len(buf) <= offset || buf[offset] != '"' {
 		return nil, p.pError("unterminated string found")
 	}
 	p.i = offset + 1

@@ -6,5 +6,5 @@ string: 'should'
 string: 'be'
 string: 'a happy bit of json'
 string: 'but someone, misspelled "true"'
-lexical error: invalid string in json text.
+parse error: invalid string in json text.
 
