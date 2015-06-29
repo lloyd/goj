@@ -355,8 +355,7 @@ func (p *Parser) send(t Type, v []byte) {
 
 }
 
-// NewParser - Allocate a new JSON Scanner that may be re-used for marginal
-// performance improvement.
+// NewParser - Allocate a new JSON Scanner that may be re-used.
 func NewParser() *Parser {
 	return &Parser{
 		nil,

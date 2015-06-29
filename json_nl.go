@@ -5,17 +5,17 @@ import (
 	"io"
 )
 
-const BUF_SIZE = 4194304 // 4meg
+const bufSize = 4194304 // 4meg
 
 // ReadJSONNL - Read and parse newline separated JSON from an `io.Reader`
-// invoke callback with each token.  Terminate if callback returns an error.
+// invoke callback with each token.  Terminate if callback returns false.
 // arguments to callback:
 //   t - token type
 //   key - key if parsing object key / value pairs
 //   value - decoded value
 //   line - line offset in file.  Distinct documents are indicated by a distinct line number.
 func ReadJSONNL(s io.Reader, cb func(t Type, key []byte, value []byte, line int64) bool) error {
-	reader := bufio.NewReaderSize(s, BUF_SIZE)
+	reader := bufio.NewReaderSize(s, bufSize)
 	var lineNumber int64
 	var err error
 	var line []byte
