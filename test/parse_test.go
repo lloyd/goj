@@ -128,16 +128,13 @@ func testParse(json string) (results string) {
 			stack = append(stack, false)
 		case goj.Integer, goj.NegInteger, goj.Float:
 			results += fmt.Sprintf("%s: %s\n", t.String(), v)
-		case goj.End:
-			last := stack[len(stack)-1]
+		case goj.ArrayEnd:
 			stack = stack[:len(stack)-1]
-			if last {
-				results += "array close ']'\n"
-			} else {
-				results += "map close '}'\n"
-			}
+			results += "array close ']'\n"
+		case goj.ObjectEnd:
+			stack = stack[:len(stack)-1]
+			results += "map close '}'\n"
 		}
-		//fmt.Printf("got %s [%s] -> '%s'\n", t, string(k), string(v))
 		return true
 	})
 	if err != nil {

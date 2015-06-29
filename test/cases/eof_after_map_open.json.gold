@@ -1,2 +1,2 @@
 map open '{'
-parse error: premature end
+parse error: premature EOF

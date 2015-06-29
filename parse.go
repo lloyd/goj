@@ -18,8 +18,9 @@ const (
 	False
 	Null
 	Array
+	ArrayEnd
 	Object
-	End
+	ObjectEnd
 )
 
 func hasAsm() bool
@@ -49,10 +50,12 @@ func (t Type) String() string {
 		return "null"
 	case Array:
 		return "array"
+	case ArrayEnd:
+		return "array end"
 	case Object:
 		return "object"
-	case End:
-		return "end"
+	case ObjectEnd:
+		return "object end"
 	}
 	return "<unknown>"
 }
@@ -65,9 +68,13 @@ const (
 	sObject
 	sArray
 	sEnd
+	sClientCancelledParse
 )
 
-type Callback func(Type, []byte, []byte) bool
+// Client callback to parsing routine.  The routine is passed
+// the type of entity parsed, a key if relevant (parsing inside an
+// object), and a decoded value.
+type Callback func(what Type, key []byte, value []byte) bool
 
 type Parser struct {
 	buf       []byte
@@ -75,15 +82,22 @@ type Parser struct {
 	keystack  [][]byte
 	states    []state
 	s         state
-	cb        Callback
+	_cb       Callback
 	cookedBuf []byte
+}
+
+func (p *Parser) cb(t Type, k, v []byte) {
+	if !p._cb(t, k, v) {
+		p.s = sClientCancelledParse
+	}
 }
 
 func (p *Parser) end() bool {
 	return p.i >= len(p.buf)
 }
 
-// Note : an ASM version has more overhead for terse json documents.
+// Note : ASM version has more overhead for terse json documents.  Heuristic based
+// optimization possible here.
 func (p *Parser) skipSpace() {
 	offset := p.i
 outer:
@@ -280,11 +294,20 @@ func (e *GojError) Error() string {
 }
 
 func (e *GojError) Verbose() string {
-	err := string(e.buf[e.offset:])
-	if len(err) > 20 {
-		err = err[0:20] + "..."
+	if len(e.buf) <= e.offset {
+		return e.e
+	} else {
+		err := string(e.buf[e.offset:])
+		if len(err) > 20 {
+			err = err[0:20] + "..."
+		}
+		return e.e + fmt.Sprintf(" at '%s' (%v)", err, e.e)
 	}
-	return e.e + fmt.Sprintf(" at '%s' (%v)", err, e.e)
+}
+
+// Error code returned from .Parse() when callback returns false.
+var ClientCancelledParse = GojError{
+	e: "client cancelled parse",
 }
 
 func (p *Parser) pError(es string) error {
@@ -332,6 +355,8 @@ func (p *Parser) send(t Type, v []byte) {
 
 }
 
+// NewParser - Allocate a new JSON Scanner that may be re-used for marginal
+// performance improvement.
 func NewParser() *Parser {
 	return &Parser{
 		nil,
@@ -344,13 +369,15 @@ func NewParser() *Parser {
 	}
 }
 
+// Parse - Parse a complete document.  Callback will be invoked once for
+// each JSON entity found.
 func (p *Parser) Parse(buf []byte, cb Callback) error {
 	p.buf = buf
 	p.i = 0
 	p.s = sValue
 	p.keystack = p.keystack[:0]
 	p.states = p.states[:0]
-	p.cb = cb
+	p._cb = cb
 	depth := 0
 
 scan:
@@ -370,7 +397,7 @@ scan:
 					} else if buf[p.i] == '}' {
 						p.popState()
 						p.s = sValueEnd
-						p.cb(End, nil, nil)
+						p.cb(ObjectEnd, nil, nil)
 					} else {
 						return p.pError("after key and value, inside map, I expect ',' or '}'")
 					}
@@ -384,7 +411,7 @@ scan:
 					} else if buf[p.i] == ']' {
 						p.popState()
 						p.s = sValueEnd
-						p.cb(End, nil, nil)
+						p.cb(ArrayEnd, nil, nil)
 					} else {
 						return p.pError("2 unexpected character")
 					}
@@ -414,7 +441,6 @@ scan:
 				if v, err := p.readString(); err != nil {
 					return err
 				} else {
-					// now we've got a string we've read. wtf to do
 					p.restoreState()
 					p.send(String, v)
 					p.s = sValueEnd
@@ -465,19 +491,19 @@ scan:
 				p.i++
 				p.popState()
 				p.s = sValueEnd
-				p.cb(End, nil, nil)
+				p.cb(ArrayEnd, nil, nil)
 			} else {
 				p.s = sValue
 			}
 		case sObject:
 			p.skipSpace()
 			if len(buf) <= p.i {
-				return p.pError("premature end")
+				return p.pError("premature EOF")
 			} else if buf[p.i] == '}' {
 				p.i++
 				p.popState()
 				p.s = sValueEnd
-				p.cb(End, nil, nil)
+				p.cb(ObjectEnd, nil, nil)
 			} else if k, err := p.readString(); err != nil {
 				return err
 			} else {
@@ -490,6 +516,8 @@ scan:
 				p.keystack = append(p.keystack, k)
 				p.s = sValue
 			}
+		case sClientCancelledParse:
+			return &ClientCancelledParse
 		default:
 			return p.pError(fmt.Sprintf("hit unimplemented state: %s", p.s))
 		}

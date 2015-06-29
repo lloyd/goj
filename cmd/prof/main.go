@@ -15,14 +15,14 @@ import (
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	fname := fmt.Sprintf("query_%d.prof", os.Getpid())
+	fname := fmt.Sprintf("goj_%d.prof", os.Getpid())
 	f, err := os.Create(fname)
 	if err != nil {
 		fmt.Printf("fatal: %s\n", err)
 		return
 	}
 
-	fmt.Printf("profiling query with output to %s\n", fname)
+	fmt.Printf("profiling goj with output to %s\n", fname)
 
 	start := time.Now()
 	numRead := 0
@@ -31,16 +31,6 @@ func main() {
 	parser := goj.NewParser()
 	InPlaceReadLine(os.Stdin, func(line []byte, lineNum int64, offset int64) error {
 		err := parser.Parse(line, func(t goj.Type, k []byte, v []byte) bool {
-			switch t {
-			case goj.True:
-			case goj.False:
-			case goj.Null:
-			case goj.String:
-			case goj.Array:
-			case goj.Object:
-			case goj.End:
-			}
-			//fmt.Printf("got %s [%s] -> '%s'\n", t, string(k), string(v))
 			return true
 		})
 

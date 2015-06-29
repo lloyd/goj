@@ -8,6 +8,7 @@
 package test
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -42,6 +43,21 @@ func BenchmarkGojScanning(b *testing.B) {
 		err := parser.Parse([]byte(codeJSON), func(t goj.Type, k []byte, v []byte) bool {
 			return true
 		})
+		if err != nil {
+			b.Fatal("Scanning:", err)
+		}
+	}
+	b.SetBytes(int64(len(codeJSON)))
+}
+
+func BenchmarkStdJSONScanning(b *testing.B) {
+	if codeJSON == nil {
+		b.StopTimer()
+		codeInit()
+		b.StartTimer()
+	}
+	for i := 0; i < b.N; i++ {
+		err := json.Unmarshal(codeJSON, &struct{}{})
 		if err != nil {
 			b.Fatal("Scanning:", err)
 		}
