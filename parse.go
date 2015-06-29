@@ -6,19 +6,31 @@ import (
 	"unicode/utf8"
 )
 
+// Type represents the JSON value type.
 type Type uint8
 
 const (
+	// String represents a JSON string.
 	String Type = iota
+	// Integer represents a JSON number known to be a uint.
 	Integer
+	// NegInteger represents a JSON number known to be an int.
 	NegInteger
+	// Float represents a JSON number that is neither an int or uint.
 	Float
+	// True represents the JSON boolean 'true'.
 	True
+	// False represents the JSON boolean 'false'.
 	False
+	// Null represents the JSON null value.
 	Null
+	// Array represents the beginning of a JSON array.
 	Array
+	// ArrayEnd represents the end of a JSON array.
 	ArrayEnd
+	// Object represents the beginning of a JSON object.
 	Object
+	// ObjectEnd represents the end of a JSON object.
 	ObjectEnd
 )
 
@@ -68,11 +80,14 @@ const (
 	sClientCancelledParse
 )
 
-// Client callback to parsing routine.  The routine is passed
-// the type of entity parsed, a key if relevant (parsing inside an
-// object), and a decoded value.
+// Callback is the signature of the client callback to the parsing routine.
+// The routine is passed the type of entity parsed, a key if relevant
+// (parsing inside an object), and a decoded value.
 type Callback func(what Type, key []byte, value []byte) bool
 
+// Parser is the primary object provided by goj via the NewParser method.
+// The various parsing routines are provided by this object, but it has no
+// exported fields.
 type Parser struct {
 	buf       []byte
 	i         int
@@ -93,8 +108,8 @@ func (p *Parser) end() bool {
 	return p.i >= len(p.buf)
 }
 
-// Note : ASM version has more overhead for terse json documents.  Heuristic based
-// optimization possible here.
+// Note: ASM version has more overhead for terse json documents.
+// Heuristic based optimization possible here.
 func (p *Parser) skipSpace() {
 	offset := p.i
 outer:
@@ -165,38 +180,36 @@ skipping:
 				if len(buf)-offset < 4 {
 					p.cookedBuf = p.cookedBuf[0:0]
 					return nil, p.pError("unexpected EOF after '\\u'")
-				} else {
-					r, err := strconv.ParseInt(string(buf[offset:offset+4]), 16, 0)
-					if err != nil {
-						p.cookedBuf = p.cookedBuf[0:0]
-						return nil, p.pError("invalid (non-hex) character occurs after '\\u' inside string.")
-					}
-					offset--
-					// is this a utf16 surrogate marker?
-					surrogateSize := 0
-					if (r & 0xFC00) == 0xD800 {
-						// point just past end of first
-						toff := offset + 5
-						// enough buffer for second utf16 codepoint?
-						if len(buf) <= (toff + 6) {
-							r = '?' // not enough buffer
-						} else if buf[toff] != '\\' || buf[toff+1] != 'u' {
-							r = '?' // surrogate marker not followed by codepoint
+				}
+				r, err := strconv.ParseInt(string(buf[offset:offset+4]), 16, 0)
+				if err != nil {
+					p.cookedBuf = p.cookedBuf[0:0]
+					return nil, p.pError("invalid (non-hex) character occurs after '\\u' inside string.")
+				}
+				offset--
+				// is this a utf16 surrogate marker?
+				surrogateSize := 0
+				if (r & 0xFC00) == 0xD800 {
+					// point just past end of first
+					toff := offset + 5
+					// enough buffer for second utf16 codepoint?
+					if len(buf) <= (toff + 6) {
+						r = '?' // not enough buffer
+					} else if buf[toff] != '\\' || buf[toff+1] != 'u' {
+						r = '?' // surrogate marker not followed by codepoint
+					} else {
+						surrogate, err := strconv.ParseInt(string(buf[toff+2:toff+6]), 16, 0)
+						if err != nil {
+							r = '?' // invalid hex in second member of pair
 						} else {
-							surrogate, err := strconv.ParseInt(string(buf[toff+2:toff+6]), 16, 0)
-							if err != nil {
-								r = '?' // invalid hex in second member of pair
-							} else {
-								surrogateSize = 6
-								r = (((r & 0x3F) << 10) | ((((r >> 6) & 0xF) + 1) << 16) | (surrogate & 0x3FF))
-							}
+							surrogateSize = 6
+							r = (((r & 0x3F) << 10) | ((((r >> 6) & 0xF) + 1) << 16) | (surrogate & 0x3FF))
 						}
 					}
-					p.addToCooked(start, offset, rune(r))
-					offset += 5 + surrogateSize
-					start = offset
 				}
-
+				p.addToCooked(start, offset, rune(r))
+				offset += 5 + surrogateSize
+				start = offset
 			default:
 				// bogus escape
 				p.i += offset
@@ -225,9 +238,8 @@ skipping:
 		b := append(p.cookedBuf, buf[start:offset]...)
 		p.cookedBuf = p.cookedBuf[0:0]
 		return b, nil
-	} else {
-		return buf[start:offset], nil
 	}
+	return buf[start:offset], nil
 }
 
 func (p *Parser) readNumber() ([]byte, Type, error) {
@@ -280,35 +292,37 @@ func (p *Parser) readNumber() ([]byte, Type, error) {
 	return p.buf[start:p.i], t, nil
 }
 
-type GojError struct {
+// The Error object is provided by the Parser when an error is encountered.
+type Error struct {
 	e      string
 	buf    []byte
 	offset int
 }
 
-func (e *GojError) Error() string {
+func (e *Error) Error() string {
 	return e.e
 }
 
-func (e *GojError) Verbose() string {
+// Verbose returns a longer version of the error string, along with a limited
+// portion of the JSON around which the error occurred.
+func (e *Error) Verbose() string {
 	if len(e.buf) <= e.offset {
 		return e.e
-	} else {
-		err := string(e.buf[e.offset:])
-		if len(err) > 20 {
-			err = err[0:20] + "..."
-		}
-		return e.e + fmt.Sprintf(" at '%s' (%v)", err, e.e)
 	}
+	err := string(e.buf[e.offset:])
+	if len(err) > 20 {
+		err = err[0:20] + "..."
+	}
+	return e.e + fmt.Sprintf(" at '%s' (%v)", err, e.e)
 }
 
 // Error code returned from .Parse() when callback returns false.
-var ClientCancelledParse = &GojError{
+var ClientCancelledParse = &Error{
 	e: "client cancelled parse",
 }
 
 func (p *Parser) pError(es string) error {
-	return &GojError{
+	return &Error{
 		e:      es,
 		buf:    p.buf,
 		offset: p.i,
@@ -365,8 +379,8 @@ func NewParser() *Parser {
 	}
 }
 
-// Parse - Parse a complete document.  Callback will be invoked once for
-// each JSON entity found.
+// Parse parses a complete JSON document. Callback will be invoked once
+// for each JSON entity found.
 func (p *Parser) Parse(buf []byte, cb Callback) error {
 	p.buf = buf
 	p.i = 0
@@ -434,21 +448,24 @@ scan:
 				p.send(Array, nil)
 				p.pushState(sArray)
 			case '"':
-				if v, err := p.readString(); err != nil {
+				var v []byte
+				var err error
+				if v, err = p.readString(); err != nil {
 					return err
-				} else {
-					p.restoreState()
-					p.send(String, v)
-					p.s = sValueEnd
 				}
+				p.restoreState()
+				p.send(String, v)
+				p.s = sValueEnd
 			case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-				if v, t, err := p.readNumber(); err != nil {
+				var t Type
+				var v []byte
+				var err error
+				if v, t, err = p.readNumber(); err != nil {
 					return err
-				} else {
-					p.restoreState()
-					p.send(t, v)
-					p.s = sValueEnd
 				}
+				p.restoreState()
+				p.send(t, v)
+				p.s = sValueEnd
 			case 'n':
 				if len("null") < len(buf)-p.i && buf[p.i+1] == 'u' && buf[p.i+2] == 'l' && buf[p.i+3] == 'l' {
 					p.i += len("null")
@@ -500,22 +517,25 @@ scan:
 				p.popState()
 				p.s = sValueEnd
 				p.cb(ObjectEnd, nil, nil)
-			} else if k, err := p.readString(); err != nil {
-				return err
 			} else {
+				var k []byte
+				var err error
+				if k, err = p.readString(); err != nil {
+					return err
+				}
 				p.skipSpace()
 				if len(buf) <= p.i || buf[p.i] != ':' {
 					return p.pError("expected ':' to separate key and value")
 				}
 				p.i++
-				//stash k, and enter value state
+				// Stash k, and enter value state
 				p.keystack = append(p.keystack, k)
 				p.s = sValue
 			}
 		case sClientCancelledParse:
 			return ClientCancelledParse
 		default:
-			return p.pError(fmt.Sprintf("hit unimplemented state: %s", p.s))
+			return p.pError(fmt.Sprintf("hit unimplemented state: %v", p.s))
 		}
 	}
 	p.skipSpace()

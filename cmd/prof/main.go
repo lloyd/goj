@@ -47,11 +47,11 @@ func main() {
 	fmt.Printf("%d read in %s\n", numRead, time.Since(start).String())
 }
 
-const BUF_SIZE = 4194304 // 4meg
+const bufSize = 4194304 // 4meg
 
-// invoke callback for every read line with
+// InPlaceReadLine invokes the provided callback for every line read.
 func InPlaceReadLine(s io.Reader, cb func([]byte, int64, int64) error) error {
-	reader := bufio.NewReaderSize(s, BUF_SIZE)
+	reader := bufio.NewReaderSize(s, bufSize)
 	var count int64
 	var offset int64
 	var err error
