@@ -70,12 +70,13 @@ const (
 type Callback func(Type, []byte, []byte) bool
 
 type Parser struct {
-	buf      []byte
-	i        int
-	keystack [][]byte
-	states   []state
-	s        state
-	cb       Callback
+	buf       []byte
+	i         int
+	keystack  [][]byte
+	states    []state
+	s         state
+	cb        Callback
+	cookedBuf []byte
 }
 
 func (p *Parser) end() bool {
@@ -97,6 +98,13 @@ outer:
 	p.i = offset
 }
 
+func (p *Parser) addToCooked(start, offset int, r rune) {
+	er := make([]byte, 5, 5)
+	x := utf8.EncodeRune(er, r)
+	p.cookedBuf = append(p.cookedBuf, p.buf[start:offset-1]...)
+	p.cookedBuf = append(p.cookedBuf, er[:x]...)
+}
+
 func (p *Parser) readString() ([]byte, error) {
 	buf := p.buf
 	if buf[p.i] != '"' {
@@ -105,13 +113,6 @@ func (p *Parser) readString() ([]byte, error) {
 	p.i++
 	start := p.i
 	offset := p.i
-	cooked := []byte{}
-	addToCooked := func(r rune) {
-		er := make([]byte, 5, 5)
-		x := utf8.EncodeRune(er, r)
-		cooked = append(cooked, buf[start:offset-1]...)
-		cooked = append(cooked, er[:x]...)
-	}
 
 skipping:
 	for len(buf) > offset {
@@ -125,36 +126,38 @@ skipping:
 			offset++
 			switch buf[offset] {
 			case '\\', '/', '"':
-				addToCooked(rune(buf[offset]))
+				p.addToCooked(start, offset, rune(buf[offset]))
 				offset++
 				start = offset
 			case 't':
-				addToCooked('\t')
+				p.addToCooked(start, offset, '\t')
 				offset++
 				start = offset
 			case 'n':
-				addToCooked('\n')
+				p.addToCooked(start, offset, '\n')
 				offset++
 				start = offset
 			case 'r':
-				addToCooked('\r')
+				p.addToCooked(start, offset, '\r')
 				offset++
 				start = offset
 			case 'b':
-				addToCooked('\b')
+				p.addToCooked(start, offset, '\b')
 				offset++
 				start = offset
 			case 'f':
-				addToCooked('\f')
+				p.addToCooked(start, offset, '\f')
 				offset++
 				start = offset
 			case 'u':
 				offset++
 				if len(buf)-offset < 4 {
+					p.cookedBuf = p.cookedBuf[0:0]
 					return nil, p.pError("unexpected EOF after '\\u'")
 				} else {
 					r, err := strconv.ParseInt(string(buf[offset:offset+4]), 16, 0)
 					if err != nil {
+						p.cookedBuf = p.cookedBuf[0:0]
 						return nil, p.pError("invalid (non-hex) character occurs after '\\u' inside string.")
 					}
 					offset--
@@ -178,7 +181,7 @@ skipping:
 							}
 						}
 					}
-					addToCooked(rune(r))
+					p.addToCooked(start, offset, rune(r))
 					offset += 5 + surrogateSize
 					start = offset
 				}
@@ -186,6 +189,7 @@ skipping:
 			default:
 				// bogus escape
 				p.i += offset
+				p.cookedBuf = p.cookedBuf[0:0]
 				return nil, p.pError("inside a string, '\\' occurs before a character which it may not")
 			}
 		case '"':
@@ -195,17 +199,21 @@ skipping:
 				offset++
 			} else {
 				p.i += offset
+				p.cookedBuf = p.cookedBuf[0:0]
 				return nil, p.pError("invalid character inside string")
 			}
 		}
 	}
 
 	if len(buf) <= offset || buf[offset] != '"' {
+		p.cookedBuf = p.cookedBuf[0:0]
 		return nil, p.pError("unterminated string found")
 	}
 	p.i = offset + 1
-	if len(cooked) > 0 {
-		return append(cooked, buf[start:offset]...), nil
+	if len(p.cookedBuf) > 0 {
+		b := append(p.cookedBuf, buf[start:offset]...)
+		p.cookedBuf = p.cookedBuf[0:0]
+		return b, nil
 	} else {
 		return buf[start:offset], nil
 	}
@@ -331,6 +339,7 @@ func NewParser() *Parser {
 		make([][]byte, 0, 4),
 		make([]state, 0, 4),
 		sValue,
+		nil,
 		nil,
 	}
 }
