@@ -306,7 +306,7 @@ func (e *GojError) Verbose() string {
 }
 
 // Error code returned from .Parse() when callback returns false.
-var ClientCancelledParse = GojError{
+var ClientCancelledParse = &GojError{
 	e: "client cancelled parse",
 }
 
@@ -516,7 +516,7 @@ scan:
 				p.s = sValue
 			}
 		case sClientCancelledParse:
-			return &ClientCancelledParse
+			return ClientCancelledParse
 		default:
 			return p.pError(fmt.Sprintf("hit unimplemented state: %s", p.s))
 		}
