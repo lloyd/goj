@@ -9,8 +9,7 @@ import (
 type Type uint8
 
 const (
-	Bool Type = iota
-	String
+	String Type = iota
 	Integer
 	NegInteger
 	Float
@@ -32,8 +31,6 @@ func scanWhitespaceChars(s []byte, offset int) int
 
 func (t Type) String() string {
 	switch t {
-	case Bool:
-		return "bool"
 	case String:
 		return "string"
 	case Integer:
