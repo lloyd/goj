@@ -5,8 +5,8 @@
 // Each pair comprises a value range.  scanning proceeds until it finds a byte
 // inside this value range.
 
-// XXX: fixme
-TEXT ·hasAsm(SB),4,$0
+// FIXME: Detect presence of SSE4.
+TEXT ·hasAsm(SB),$0-1
     MOVQ $1, AX
     CPUID
     SHRQ $23, CX
@@ -19,7 +19,7 @@ TEXT ·scanNumberChars(SB),4,$0-40
     MOVQ $0x000000FF3a2F01, BX
     MOVQ BX, X0
     // first argument is the byte array we're scanning
-    MOVQ s+0(FP), SI
+    MOVQ s_base+0(FP), SI
     MOVQ offset+24(FP), BX
     ADDQ BX, SI
 
@@ -27,7 +27,7 @@ TEXT ·scanNumberChars(SB),4,$0-40
     // now load the string length into AX, loop control
     // we'll do one loop for every substring of up to 16 bytes,
     // thats (x + 15) >> 4
-	MOVQ s+8(FP), AX
+	MOVQ s_len+8(FP), AX
     SUBQ BX, AX
     // save off number of bytes
     MOVQ AX, DX
@@ -74,7 +74,7 @@ TEXT ·scanNonSpecialStringChars(SB),4,$0-40
     // now load the string length into AX, loop control
     // we'll do one loop for every substring of up to 16 bytes,
     // thats (x + 15) >> 4
-	MOVQ s+8(FP), AX
+	MOVQ s_len+8(FP), AX
     SUBQ BX, AX
     // save off number of bytes
     MOVQ AX, DX
@@ -124,7 +124,7 @@ TEXT ·scanWhitespaceChars(SB),4,$0-40
     // now load the string length into AX, loop control
     // we'll do one loop for every substring of up to 16 bytes,
     // thats (x + 15) >> 4
-	MOVQ s+8(FP), AX
+	MOVQ s_len+8(FP), AX
     SUBQ BX, AX
     MOVQ AX, DX
     ADDQ $15, AX
