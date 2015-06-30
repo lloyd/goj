@@ -475,7 +475,7 @@ scan:
 				p.send(t, v)
 				p.s = sValueEnd
 			case 'n':
-				if len("null") < len(buf)-p.i && buf[p.i+1] == 'u' && buf[p.i+2] == 'l' && buf[p.i+3] == 'l' {
+				if len("null") <= len(buf)-p.i && buf[p.i+1] == 'u' && buf[p.i+2] == 'l' && buf[p.i+3] == 'l' {
 					p.i += len("null")
 					p.restoreState()
 					p.send(Null, nil)
@@ -484,7 +484,7 @@ scan:
 					return p.pError("invalid string in json text.")
 				}
 			case 't':
-				if len("true") < len(buf)-p.i && buf[p.i+1] == 'r' && buf[p.i+2] == 'u' && buf[p.i+3] == 'e' {
+				if len("true") <= len(buf)-p.i && buf[p.i+1] == 'r' && buf[p.i+2] == 'u' && buf[p.i+3] == 'e' {
 					p.i += len("true")
 					p.restoreState()
 					p.send(True, nil)
@@ -493,7 +493,7 @@ scan:
 					return p.pError("invalid string in json text.")
 				}
 			case 'f':
-				if len("false") < len(buf)-p.i && buf[p.i+1] == 'a' && buf[p.i+2] == 'l' && buf[p.i+3] == 's' && buf[p.i+4] == 'e' {
+				if len("false") <= len(buf)-p.i && buf[p.i+1] == 'a' && buf[p.i+2] == 'l' && buf[p.i+3] == 's' && buf[p.i+4] == 'e' {
 					p.i += len("false")
 					p.restoreState()
 					p.send(False, nil)
