@@ -89,7 +89,7 @@ real         0m25.198s
 user         0m25.017s
 sys          0m0.180s
 ```
-Comapred against [yajl](https://github.com/lloyd/yajl) (a fast streaming json parser
+Compared against [yajl](https://github.com/lloyd/yajl) (a fast streaming json parser
 written in C) in a fair fight, **goj** is about 37% slower.
 
 ```
