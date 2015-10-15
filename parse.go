@@ -550,5 +550,10 @@ scan:
 	if !p.end() {
 		return p.pError("trailing garbage")
 	}
+	// is the parse complete?
+	if len(p.states) > 0 {
+		return p.pError("premature EOF")
+	}
+
 	return nil
 }

@@ -1,0 +1,10 @@
+map open '{'
+key: 'nodes'
+array open '['
+integer: 1
+integer: 2
+integer: 3
+integer: 4
+integer: 0
+integer: 0
+parse error: premature EOF
