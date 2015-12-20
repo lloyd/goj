@@ -463,7 +463,9 @@ scan:
 				}
 				p.restoreState()
 				p.send(String, v)
-				p.s = sValueEnd
+				if p.s != sClientCancelledParse {
+					p.s = sValueEnd
+				}
 			case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 				var t Type
 				var v []byte
@@ -473,13 +475,17 @@ scan:
 				}
 				p.restoreState()
 				p.send(t, v)
-				p.s = sValueEnd
+				if p.s != sClientCancelledParse {
+					p.s = sValueEnd
+				}
 			case 'n':
 				if len("null") <= len(buf)-p.i && buf[p.i+1] == 'u' && buf[p.i+2] == 'l' && buf[p.i+3] == 'l' {
 					p.i += len("null")
 					p.restoreState()
 					p.send(Null, nil)
-					p.s = sValueEnd
+					if p.s != sClientCancelledParse {
+						p.s = sValueEnd
+					}
 				} else {
 					return p.pError("invalid string in json text.")
 				}
@@ -488,7 +494,9 @@ scan:
 					p.i += len("true")
 					p.restoreState()
 					p.send(True, nil)
-					p.s = sValueEnd
+					if p.s != sClientCancelledParse {
+						p.s = sValueEnd
+					}
 				} else {
 					return p.pError("invalid string in json text.")
 				}
@@ -497,7 +505,9 @@ scan:
 					p.i += len("false")
 					p.restoreState()
 					p.send(False, nil)
-					p.s = sValueEnd
+					if p.s != sClientCancelledParse {
+						p.s = sValueEnd
+					}
 				} else {
 					return p.pError("invalid string in json text.")
 				}
