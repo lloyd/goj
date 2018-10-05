@@ -382,14 +382,19 @@ func NewParser() *Parser {
 // Parse parses a complete JSON document. Callback will be invoked once
 // for each JSON entity found.
 func (p *Parser) Parse(buf []byte, cb Callback) error {
-	// HACK/TODO:  loose about 3% of performance to fix crasher.
-	// PCMPISTRI seems to be crashing by running past the end of
-	// input strings.  Odd that simply ensuring null padding does not address
-	// this.
-	b := make([]byte, len(buf), len(buf)+16)
-	copy(b, buf)
-	buf = b
-
+	if cap(buf) < len(buf)+16 {
+		// HACK/TODO:  loose about 3% of performance to fix crasher.
+		// PCMPISTRI seems to be crashing by running past the end of
+		// input strings.  Odd that simply ensuring null padding does not address
+		// this.
+		b := make([]byte, len(buf), len(buf)+16)
+		copy(b, buf)
+		buf = b
+	} else {
+		// zeroing the padding just in case
+		var zeroes [16]byte
+		copy(buf[len(buf):cap(buf)], zeroes[0:16])
+	}
 	p.buf = buf
 	p.i = 0
 	p.s = sValue
