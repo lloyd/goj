@@ -44,11 +44,12 @@ TEXT ·scanNumberChars(SB),4,$0-40
 scanNumberCharsLoop:
     PCMPESTRI $0x04, 0(SI), X0
     JC scanNumberCharsFound
+    CMPQ DX, $16
+    JLE scanNumberCharsEnd
     ADDQ $16, SI
     ADDQ $16, BX
-    CMPQ DX, $16
     SUBQ $16, DX
-    JA scanNumberCharsLoop
+    JMP scanNumberCharsLoop
 
 scanNumberCharsEnd:
     ADDQ DX, BX
@@ -90,11 +91,12 @@ TEXT ·scanNonSpecialStringChars(SB),4,$0-40
 scanNonSpecialStringCharsLoop:
     PCMPESTRI $0x04, 0(SI), X0
     JC scanNonSpecialStringCharsFound
+    CMPQ DX, $16
+    JLE scanNonSpecialStringCharsEnd
     ADDQ $16, SI
     ADDQ $16, BX
-    CMPQ DX, $16
     SUBQ $16, DX
-    JA scanNonSpecialStringCharsLoop
+    JMP scanNonSpecialStringCharsLoop
 
 scanNonSpecialStringCharsEnd:
     ADDQ DX, BX
