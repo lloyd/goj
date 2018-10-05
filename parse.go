@@ -34,12 +34,10 @@ const (
 	ObjectEnd
 )
 
+// ASM optimized scanning routines
 func hasAsm() bool
-func countSlice(s []uint64) int
-func findStrRange(r []byte, s []byte) int
 func scanNumberChars(s []byte, offset int) int
 func scanNonSpecialStringChars(s []byte, offset int) int
-func scanWhitespaceChars(s []byte, offset int) int
 
 func (t Type) String() string {
 	switch t {
@@ -382,14 +380,6 @@ func NewParser() *Parser {
 // Parse parses a complete JSON document. Callback will be invoked once
 // for each JSON entity found.
 func (p *Parser) Parse(buf []byte, cb Callback) error {
-	// HACK/TODO:  loose about 3% of performance to fix crasher.
-	// PCMPISTRI seems to be crashing by running past the end of
-	// input strings.  Odd that simply ensuring null padding does not address
-	// this.
-	b := make([]byte, len(buf), len(buf)+16)
-	copy(b, buf)
-	buf = b
-
 	p.buf = buf
 	p.i = 0
 	p.s = sValue
