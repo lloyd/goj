@@ -22,17 +22,16 @@ TEXT ·scanNumberChars(SB),4,$0-40
 
     // first argument is the byte array we're scanning
     MOVQ s+0(FP), SI
+    // second argument is the offset into the array
     MOVQ offset+24(FP), BX
     ADDQ BX, SI
 
-    // second argument is the offset into the array
-    // now load the string length into AX, loop control
-    // we'll do one loop for every substring of up to 16 bytes,
-    // thats (x + 15) >> 4
+    // now load the string length into DX, we'll use this
+    // both as an argument to PCMPESTRI and as loop control
     MOVQ s_len+8(FP), DX
     SUBQ BX, DX
 
-    // AX holds $6 - len of our range (argument to PCMPESTRI)
+    // AX holds $4 - byte len of our range (argument to PCMPESTRI)
     // X0 holds numeric byte ranges that should cause us to halt scanning
     // DX holds the number of bytes remaining (argument to PCMPESTRI)
     // SI holds the memory address of slice + offset
@@ -69,13 +68,12 @@ TEXT ·scanNonSpecialStringChars(SB),4,$0-40
 
     // first argument is the byte array we're scanning
     MOVQ s+0(FP), SI
+    // second argument is the offset into the array
     MOVQ offset+24(FP), BX
     ADDQ BX, SI
 
-    // second argument is the offset into the array
-    // now load the string length into AX, loop control
-    // we'll do one loop for every substring of up to 16 bytes,
-    // thats (x + 15) >> 4
+    // now load the string length into DX, we'll use this
+    // both as an argument to PCMPESTRI and as loop control
     MOVQ s_len+8(FP), DX
     SUBQ BX, DX
 
