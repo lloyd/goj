@@ -129,10 +129,10 @@ func (p *Parser) addToCooked(start, offset int, r rune) {
 	p.cookedBuf = append(p.cookedBuf, er[:x]...)
 }
 
-func (p *Parser) readString() ([]byte, error) {
+func (p *Parser) readString() ([]byte, bool, error) {
 	buf := p.buf
 	if buf[p.i] != '"' {
-		return nil, p.pError("string expected '\"'")
+		return nil, false, p.pError("string expected '\"'")
 	}
 	p.i++
 	start := p.i
@@ -177,12 +177,12 @@ skipping:
 				offset++
 				if len(buf)-offset < 4 {
 					p.cookedBuf = p.cookedBuf[0:0]
-					return nil, p.pError("unexpected EOF after '\\u'")
+					return nil, false, p.pError("unexpected EOF after '\\u'")
 				}
 				r, err := strconv.ParseInt(string(buf[offset:offset+4]), 16, 0)
 				if err != nil {
 					p.cookedBuf = p.cookedBuf[0:0]
-					return nil, p.pError("invalid (non-hex) character occurs after '\\u' inside string.")
+					return nil, false, p.pError("invalid (non-hex) character occurs after '\\u' inside string.")
 				}
 				offset--
 				// is this a utf16 surrogate marker?
@@ -212,7 +212,7 @@ skipping:
 				// bogus escape
 				p.i += offset
 				p.cookedBuf = p.cookedBuf[0:0]
-				return nil, p.pError("inside a string, '\\' occurs before a character which it may not")
+				return nil, false, p.pError("inside a string, '\\' occurs before a character which it may not")
 			}
 		case '"':
 			break skipping
@@ -222,22 +222,22 @@ skipping:
 			} else {
 				p.i += offset
 				p.cookedBuf = p.cookedBuf[0:0]
-				return nil, p.pError("invalid character inside string")
+				return nil, false, p.pError("invalid character inside string")
 			}
 		}
 	}
 
 	if len(buf) <= offset || buf[offset] != '"' {
 		p.cookedBuf = p.cookedBuf[0:0]
-		return nil, p.pError("unterminated string found")
+		return nil, false, p.pError("unterminated string found")
 	}
 	p.i = offset + 1
 	if len(p.cookedBuf) > 0 {
 		b := append(p.cookedBuf, buf[start:offset]...)
 		p.cookedBuf = p.cookedBuf[0:0]
-		return b, nil
+		return b, true, nil
 	}
-	return buf[start:offset], nil
+	return buf[start:offset], false, nil
 }
 
 func (p *Parser) readNumber() ([]byte, Type, error) {
@@ -448,7 +448,7 @@ scan:
 			case '"':
 				var v []byte
 				var err error
-				if v, err = p.readString(); err != nil {
+				if v, _, err = p.readString(); err != nil {
 					return err
 				}
 				p.restoreState()
@@ -528,7 +528,8 @@ scan:
 			} else {
 				var k []byte
 				var err error
-				if k, err = p.readString(); err != nil {
+				var cooked bool
+				if k, cooked, err = p.readString(); err != nil {
 					return err
 				}
 				p.skipSpace()
@@ -537,6 +538,17 @@ scan:
 				}
 				p.i++
 				// Stash k, and enter value state
+				if cooked {
+					// if we're parsing a key, and it resides in the cooked buffer
+					// (contained an escape), then we must copy it while
+					// we parse the value, which may *also* use the cooked buffer.
+					//
+					// Assumption: cooked keys are rare, don't worry about the
+					// copy!
+					buf := make([]byte, len(k))
+					copy(buf, k)
+					k = buf
+				}
 				p.keystack = append(p.keystack, k)
 				p.s = sValue
 			}
