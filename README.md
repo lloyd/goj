@@ -62,48 +62,58 @@ func main() {
 
 ## Performance
 
+All numbers below are on:
+```
+go version go1.11.1 linux/amd64
+Intel(R) Xeon(R) CPU E5-2643 v4 @ 3.40GHz
+```
+
 Using the same JSON sample data as `encoding/json`, **goj** scans about 3x
 faster than go's reflection based json parsing:
 
 ```
-$ go test -bench .
+$ go test -bench . -run 'XXX'
+goos: linux
+goarch: amd64
+pkg: github.com/lloyd/goj/test
+BenchmarkGojScanning-24                   300         4836167 ns/op       401.24 MB/s
+BenchmarkStdJSONScanning-24               100        13836559 ns/op       140.24 MB/s
 PASS
-BenchmarkGojScanning	     200	   6466965 ns/op	 300.06 MB/s
-BenchmarkStdJSONScanning	     100	  17529895 ns/op	 110.70 MB/s
-ok  	_/home/lloyd/dev/goj/test	3.735s
+ok      github.com/lloyd/goj/test       3.384s
 ```
 
 See `test/bench_test.go` for the source.
 
-Comparing against [jq](http://stedolan.github.io/jq/) is (a tiny and awesome tool
+Comparing against [jq](http://stedolan.github.io/jq/) (a tiny and awesome tool
 written in C that extracts nested values from json data), **goj**
  is more than 4x faster.
 
 ```
-$ time go run example/main.go < 1.2gb_sample_data.json > /dev/null
-real         0m5.712s
-user         0m5.437s
-sys          0m0.273s
-$ time jq .name < 1.2gb_sample_data.json  > /dev/null
-real         0m25.198s
-user         0m25.017s
-sys          0m0.180s
+$ go build example/main.go && time ./main < ~/4.9gb_sample.json > /dev/null
+real 0m20.476s
+user 0m18.838s
+sys  0m1.734s
+
+$ time jq -r .name < ~/4.9gb_sample.json > /dev/null
+real   1m26.964s
+user   1m25.515s
+sys    0m1.372s
 ```
 Compared against [yajl](https://github.com/lloyd/yajl) (a fast streaming json parser
-written in C) in a fair fight, **goj** is about 37% slower.
+written in C) in a fair fight, **goj** is about the same.
 
 ```
-$ time json_verify -s < 1.2gb_sample_data.json
-JSON is valid
+$ json_verify -s < ~/4.9gb_sample.json
+...
+real 0m14.504s
+user 0m13.754s
+sys  0m0.736s
 
-real 0m3.560s
-user 0m3.420s
-sys  0m0.137s
-$ time go run cmd/prof/main.go < 1.2gb_sample_data.json
-
-real    0m4.897s
-user    0m4.717s
-sys     0m0.183s
+$ go build cmd/prof/main.go && time ./main < ~/4.9gb_sample.json
+...
+real    0m14.171s
+user    0m13.386s
+sys     0m0.793s
 ```
 
 ## License
