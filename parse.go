@@ -34,11 +34,6 @@ const (
 	ObjectEnd
 )
 
-// ASM optimized scanning routines
-func hasAsm() bool
-func scanNumberChars(s []byte, offset int) int
-func scanNonSpecialStringChars(s []byte, offset int) int
-
 func (t Type) String() string {
 	switch t {
 	case String:
