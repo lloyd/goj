@@ -12,22 +12,20 @@ func hasAsm() bool {
 
 func scanNonSpecialStringChars(s []byte, offset int) int {
 	x := 0
-	for x = 0; x < len(s)-offset; x++ {
-		r := rune(s[offset+x])
-		if r == '"' || r == '\\' || r < 0x20 {
-			return x
+	for x = offset; x < len(s); x++ {
+		if s[x] == '"' || s[x] == '\\' || s[x] < 0x20 {
+			return x - offset
 		}
 	}
-	return x
+	return x - offset
 }
 
 func scanNumberChars(s []byte, offset int) int {
 	x := 0
-	for x = 0; x < len(s)-offset; x++ {
-		r := rune(s[offset+x])
-		if r < '0' || r > '9' {
-			return x
+	for x = offset; x < len(s); x++ {
+		if s[x] < '0' || s[x] > '9' {
+			return x - offset
 		}
 	}
-	return x
+	return x - offset
 }
