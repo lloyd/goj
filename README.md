@@ -1,5 +1,3 @@
-**Warning:**  This library is not yet ready for use, when this notice disappears, you can use it.
-
 # GO Json scanner
 
 **goj** is a small low-level JSON scanning library.  It is representation-free, providing
