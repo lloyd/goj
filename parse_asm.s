@@ -14,7 +14,7 @@ TEXT ·hasAsm(SB),$0-1
     MOVB CX, ret+0(FP)
 RET
 
-TEXT ·scanNumberChars(SB),4,$0-40
+TEXT ·scanNumberCharsASM(SB),4,$0-40
     // load range 0-9
     MOVQ $0x000000FF3a2F01, BX
     MOVQ BX, X0
@@ -60,7 +60,7 @@ scanNumberCharsFound:
     MOVQ BX, ret+32(FP)
     RET
 
-TEXT ·scanNonSpecialStringChars(SB),4,$0-40
+TEXT ·scanNonSpecialStringCharsASM(SB),4,$0-40
     // load range (control, '"', and '\')
     MOVQ $0x5c5c22221f01, BX
     MOVQ BX, X0
