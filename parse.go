@@ -2,9 +2,15 @@ package goj
 
 import (
 	"fmt"
+	"os"
+	"reflect"
 	"strconv"
 	"unicode/utf8"
+	"unsafe"
 )
+
+// Global PageSize variable so a sys call is not made each time
+var PageSize = uintptr(os.Getpagesize())
 
 // Type represents the JSON value type.
 type Type uint8
@@ -36,8 +42,28 @@ const (
 
 // ASM optimized scanning routines
 func hasAsm() bool
-func scanNumberChars(s []byte, offset int) int
-func scanNonSpecialStringChars(s []byte, offset int) int
+func scanNumberCharsASM(s []byte, offset int) int
+func scanNonSpecialStringCharsASM(s []byte, offset int) int
+
+//go:nosplit
+func scanNonSpecialStringCharsGo(s []byte, offset int) (x int) {
+	for i, c := range s[offset:] {
+		if c == '"' || c == '\\' || c < 0x20 {
+			return i
+		}
+	}
+	return len(s) - offset
+}
+
+//go:nosplit
+func scanNumberCharsGo(s []byte, offset int) (x int) {
+	for i, c := range s[offset:] {
+		if c < '0' || c > '9' {
+			return i
+		}
+	}
+	return len(s) - offset
+}
 
 func (t Type) String() string {
 	switch t {
@@ -87,13 +113,15 @@ type Callback func(what Type, key []byte, value []byte) bool
 // The various parsing routines are provided by this object, but it has no
 // exported fields.
 type Parser struct {
-	buf       []byte
-	i         int
-	keystack  [][]byte
-	states    []state
-	s         state
-	_cb       Callback
-	cookedBuf []byte
+	buf                       []byte
+	i                         int
+	keystack                  [][]byte
+	states                    []state
+	s                         state
+	_cb                       Callback
+	cookedBuf                 []byte
+	scanNumberChars           func(s []byte, offset int) int
+	scanNonSpecialStringChars func(s []byte, offset int) int
 }
 
 func (p *Parser) cb(t Type, k, v []byte) {
@@ -140,7 +168,7 @@ func (p *Parser) readString() ([]byte, bool, error) {
 
 skipping:
 	for len(buf) > offset {
-		offset += scanNonSpecialStringChars(buf, offset)
+		offset += p.scanNonSpecialStringChars(buf, offset)
 		if len(buf) <= offset {
 			break
 		}
@@ -249,7 +277,7 @@ func (p *Parser) readNumber() ([]byte, Type, error) {
 		case '-':
 			t = NegInteger
 			p.i++
-			x := scanNumberChars(p.buf, p.i)
+			x := p.scanNumberChars(p.buf, p.i)
 			if x == 0 {
 				return nil, t, p.pError("malformed number, a digit is required after the minus sign")
 			}
@@ -257,7 +285,7 @@ func (p *Parser) readNumber() ([]byte, Type, error) {
 		case '0':
 			p.i++
 		case '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			p.i += scanNumberChars(p.buf, p.i)
+			p.i += p.scanNumberChars(p.buf, p.i)
 		}
 		if p.i == start {
 			return nil, t, p.pError("number expected")
@@ -265,7 +293,7 @@ func (p *Parser) readNumber() ([]byte, Type, error) {
 		if len(p.buf) > p.i && p.buf[p.i] == '.' {
 			t = Float
 			p.i++
-			x := scanNumberChars(p.buf, p.i)
+			x := p.scanNumberChars(p.buf, p.i)
 			if x == 0 {
 				return nil, t, p.pError("digit expected after decimal point")
 			}
@@ -279,7 +307,7 @@ func (p *Parser) readNumber() ([]byte, Type, error) {
 			if len(p.buf) > p.i && (p.buf[p.i] == '-' || p.buf[p.i] == '+') {
 				p.i++
 			}
-			x := scanNumberChars(p.buf, p.i)
+			x := p.scanNumberChars(p.buf, p.i)
 			if x == 0 {
 				return nil, t, p.pError("digits expected after exponent marker (e)")
 			}
@@ -374,7 +402,15 @@ func NewParser() *Parser {
 		sValue,
 		nil,
 		nil,
+		scanNumberCharsGo,
+		scanNonSpecialStringCharsGo,
 	}
+}
+
+// recordNearPage returns true if the end of the record is within 15 bytes of the end of a page
+func recordNearPage(buf []byte) bool {
+	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&buf))
+	return (hdr.Data+uintptr(hdr.Len)-1)&(PageSize-1) >= PageSize-15
 }
 
 // Parse parses a complete JSON document. Callback will be invoked once
@@ -387,7 +423,13 @@ func (p *Parser) Parse(buf []byte, cb Callback) error {
 	p.states = p.states[:0]
 	p._cb = cb
 	depth := 0
-
+	if recordNearPage(buf) || !hasAsm() {
+		p.scanNonSpecialStringChars = scanNonSpecialStringCharsGo
+		p.scanNumberChars = scanNumberCharsGo
+	} else {
+		p.scanNonSpecialStringChars = scanNonSpecialStringCharsASM
+		p.scanNumberChars = scanNumberCharsASM
+	}
 scan:
 	for len(buf) > p.i {
 		switch p.s {

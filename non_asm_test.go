@@ -6,21 +6,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const maxTestBufSize = 17317
-
-func TestScanNumbers(t *testing.T) {
+func TestScanNumbersGo(t *testing.T) {
 	buf := make([]byte, maxTestBufSize)
 	for i := 0; i < maxTestBufSize; i++ {
 		buf[i] = byte('0' + (i % 10))
 	}
 
 	for i := 0; i < maxTestBufSize; i++ {
-		x := scanNumberCharsASM(buf[i:], 0)
+		x := scanNumberCharsGo(buf[i:], 0)
 		assert.Equal(t, maxTestBufSize, i+x)
 	}
 }
 
-func TestScanPastEnd(t *testing.T) {
+func TestScanPastEndGo(t *testing.T) {
 	// 32 byte buffer
 	buf := make([]byte, 32)
 	// polulated with alpha data
@@ -35,19 +33,19 @@ func TestScanPastEnd(t *testing.T) {
 	// we shouldn't detect this quote
 	slice := buf[2:4]
 	slicelen := len(slice)
-	x := scanNonSpecialStringCharsASM(slice, 0)
+	x := scanNonSpecialStringCharsGo(slice, 0)
 	assert.Equal(t, slicelen, x)
 }
 
-func TestScanNonSpecialStringChars(t *testing.T) {
+func TestScanNonSpecialStringCharsGo(t *testing.T) {
 	buf := make([]byte, maxTestBufSize)
 	for i := 0; i < maxTestBufSize; i++ {
 		buf[i] = byte('a' + (i % 26))
 	}
-	assert.Equal(t, maxTestBufSize, scanNonSpecialStringCharsASM(buf, 0))
+	assert.Equal(t, maxTestBufSize, scanNonSpecialStringCharsGo(buf, 0))
 
 	for i := 0; i < maxTestBufSize; i++ {
-		x := scanNonSpecialStringCharsASM(buf, i)
+		x := scanNonSpecialStringCharsGo(buf, i)
 		assert.Equal(t, maxTestBufSize, i+x)
 	}
 }
