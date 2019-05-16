@@ -30,8 +30,8 @@ func main() {
 	pprof.StartCPUProfile(f)
 	parser := goj.NewParser()
 	InPlaceReadLine(os.Stdin, func(line []byte, lineNum int64, offset int64) error {
-		err := parser.Parse(line, func(t goj.Type, k []byte, v []byte) bool {
-			return true
+		err := parser.Parse(line, func(t goj.Type, k []byte, v []byte) goj.Action {
+			return goj.Continue
 		})
 
 		if err != nil {

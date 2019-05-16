@@ -2,7 +2,6 @@ package test
 
 import (
 	"testing"
-
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -107,7 +106,7 @@ func getTests() []*parseTestCase {
 func testParse(json string) (results string) {
 	var stack []bool
 	parser := goj.NewParser()
-	err := parser.Parse([]byte(json), func(t goj.Type, k []byte, v []byte) bool {
+	err := parser.Parse([]byte(json), func(t goj.Type, k []byte, v []byte) goj.Action {
 		if len(k) > 0 {
 			results += fmt.Sprintf("key: '%s'\n", string(k))
 		}
@@ -135,7 +134,7 @@ func testParse(json string) (results string) {
 			stack = stack[:len(stack)-1]
 			results += "map close '}'\n"
 		}
-		return true
+		return goj.Continue
 	})
 	if err != nil {
 		results += fmt.Sprintf("parse error: %s\n", err)

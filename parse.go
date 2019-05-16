@@ -2,9 +2,15 @@ package goj
 
 import (
 	"fmt"
+	"os"
+	"reflect"
 	"strconv"
 	"unicode/utf8"
+	"unsafe"
 )
+
+// Global PageSize variable so a sys call is not made each time
+var PageSize = uintptr(os.Getpagesize())
 
 // Type represents the JSON value type.
 type Type uint8
@@ -32,12 +38,68 @@ const (
 	Object
 	// ObjectEnd represents the end of a JSON object.
 	ObjectEnd
+	// SkippedData represent the []byte of data that was skipped.
+	SkippedData
+)
+
+// Action drives the behavior from the callback
+type Action uint8
+
+const (
+	Continue Action = iota
+	// Cancel the parsing
+	Cancel
+	// Skips the current content and invoke callback when over with the []slice
+	Skip
 )
 
 // ASM optimized scanning routines
 func hasAsm() bool
-func scanNumberChars(s []byte, offset int) int
-func scanNonSpecialStringChars(s []byte, offset int) int
+func scanNumberCharsASM(s []byte, offset int) int
+func scanNonSpecialStringCharsASM(s []byte, offset int) int
+
+//go:nosplit
+func scanNonSpecialStringCharsGo(s []byte, offset int) (x int) {
+	for i, c := range s[offset:] {
+		if c == '"' || c == '\\' || c < 0x20 {
+			return i
+		}
+	}
+	return len(s) - offset
+}
+
+//go:nosplit
+func scanNumberCharsGo(s []byte, offset int) (x int) {
+	for i, c := range s[offset:] {
+		if c < '0' || c > '9' {
+			return i
+		}
+	}
+	return len(s) - offset
+}
+
+func scanBraces(s []byte, offset int) int
+func scanBrackets(s []byte, offset int) int
+
+//go:nosplit
+func scanBracesGo(s []byte, offset int) int {
+	for i, c := range s[offset:] {
+		if c == '{' || c == '}' || c == '"' {
+			return i
+		}
+	}
+	return len(s) - offset
+}
+
+//go:nosplit
+func scanBracketsGo(s []byte, offset int) int {
+	for i, c := range s[offset:] {
+		if c == '[' || c == ']' || c == '"' {
+			return i
+		}
+	}
+	return len(s) - offset
+}
 
 func (t Type) String() string {
 	switch t {
@@ -63,6 +125,20 @@ func (t Type) String() string {
 		return "object"
 	case ObjectEnd:
 		return "object end"
+	case SkippedData:
+		return "skipped data"
+	}
+	return "<unknown>"
+}
+
+func (a Action) String() string {
+	switch a {
+	case Continue:
+		return "continue"
+	case Cancel:
+		return "cancel"
+	case Skip:
+		return "skip"
 	}
 	return "<unknown>"
 }
@@ -76,29 +152,46 @@ const (
 	sArray
 	sEnd
 	sClientCancelledParse
+	sClientSkippingObject // will skip an entire value
+	sClientSkippingArray  // will skip an entire value
 )
+
+func (s state) isSkipping() bool {
+	return s > sClientCancelledParse
+}
 
 // Callback is the signature of the client callback to the parsing routine.
 // The routine is passed the type of entity parsed, a key if relevant
 // (parsing inside an object), and a decoded value.
-type Callback func(what Type, key []byte, value []byte) bool
+type Callback func(what Type, key []byte, value []byte) Action
 
 // Parser is the primary object provided by goj via the NewParser method.
 // The various parsing routines are provided by this object, but it has no
 // exported fields.
 type Parser struct {
-	buf       []byte
-	i         int
-	keystack  [][]byte
-	states    []state
-	s         state
-	_cb       Callback
-	cookedBuf []byte
+	buf                       []byte
+	i                         int
+	keystack                  [][]byte
+	states                    []state
+	s                         state
+	_cb                       Callback
+	cookedBuf                 []byte
+	scanNumberChars           func(s []byte, offset int) int
+	scanNonSpecialStringChars func(s []byte, offset int) int
 }
 
 func (p *Parser) cb(t Type, k, v []byte) {
-	if !p._cb(t, k, v) {
+	ok := p._cb(t, k, v)
+	switch ok {
+	case Continue:
+	case Cancel:
 		p.s = sClientCancelledParse
+	case Skip:
+		if t == Object {
+			p.s = sClientSkippingObject
+		} else if t == Array {
+			p.s = sClientSkippingArray
+		}
 	}
 }
 
@@ -137,12 +230,12 @@ func (p *Parser) readString() ([]byte, bool, error) {
 	p.i++
 	start := p.i
 	offset := p.i
+	p.cookedBuf = p.cookedBuf[0:0]
 
-skipping:
 	for len(buf) > offset {
-		offset += scanNonSpecialStringChars(buf, offset)
+		offset += p.scanNonSpecialStringChars(buf, offset)
 		if len(buf) <= offset {
-			break
+			return nil, false, p.pError("unterminated string found")
 		}
 		c := buf[offset]
 		switch c {
@@ -176,12 +269,10 @@ skipping:
 			case 'u':
 				offset++
 				if len(buf)-offset < 4 {
-					p.cookedBuf = p.cookedBuf[0:0]
 					return nil, false, p.pError("unexpected EOF after '\\u'")
 				}
 				r, err := strconv.ParseInt(string(buf[offset:offset+4]), 16, 0)
 				if err != nil {
-					p.cookedBuf = p.cookedBuf[0:0]
 					return nil, false, p.pError("invalid (non-hex) character occurs after '\\u' inside string.")
 				}
 				offset--
@@ -211,17 +302,19 @@ skipping:
 			default:
 				// bogus escape
 				p.i += offset
-				p.cookedBuf = p.cookedBuf[0:0]
 				return nil, false, p.pError("inside a string, '\\' occurs before a character which it may not")
 			}
 		case '"':
-			break skipping
+			p.i = offset + 1
+			if len(p.cookedBuf) > 0 {
+				return append(p.cookedBuf, buf[start:offset]...), true, nil
+			}
+			return buf[start:offset], false, nil
 		default:
 			if c >= 0x20 {
 				offset++
 			} else {
 				p.i += offset
-				p.cookedBuf = p.cookedBuf[0:0]
 				return nil, false, p.pError("invalid character inside string")
 			}
 		}
@@ -249,7 +342,7 @@ func (p *Parser) readNumber() ([]byte, Type, error) {
 		case '-':
 			t = NegInteger
 			p.i++
-			x := scanNumberChars(p.buf, p.i)
+			x := p.scanNumberChars(p.buf, p.i)
 			if x == 0 {
 				return nil, t, p.pError("malformed number, a digit is required after the minus sign")
 			}
@@ -257,7 +350,7 @@ func (p *Parser) readNumber() ([]byte, Type, error) {
 		case '0':
 			p.i++
 		case '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			p.i += scanNumberChars(p.buf, p.i)
+			p.i += p.scanNumberChars(p.buf, p.i)
 		}
 		if p.i == start {
 			return nil, t, p.pError("number expected")
@@ -265,7 +358,7 @@ func (p *Parser) readNumber() ([]byte, Type, error) {
 		if len(p.buf) > p.i && p.buf[p.i] == '.' {
 			t = Float
 			p.i++
-			x := scanNumberChars(p.buf, p.i)
+			x := p.scanNumberChars(p.buf, p.i)
 			if x == 0 {
 				return nil, t, p.pError("digit expected after decimal point")
 			}
@@ -279,7 +372,7 @@ func (p *Parser) readNumber() ([]byte, Type, error) {
 			if len(p.buf) > p.i && (p.buf[p.i] == '-' || p.buf[p.i] == '+') {
 				p.i++
 			}
-			x := scanNumberChars(p.buf, p.i)
+			x := p.scanNumberChars(p.buf, p.i)
 			if x == 0 {
 				return nil, t, p.pError("digits expected after exponent marker (e)")
 			}
@@ -288,6 +381,87 @@ func (p *Parser) readNumber() ([]byte, Type, error) {
 		}
 	}
 	return p.buf[start:p.i], t, nil
+}
+
+func (p *Parser) skipString() error {
+	buf := p.buf
+	if buf[p.i] != '"' {
+		return p.pError("string expected '\"'")
+	}
+	p.i++
+	offset := p.i
+
+	for len(buf) > offset {
+		offset += p.scanNonSpecialStringChars(buf, offset)
+		if len(buf) <= offset {
+			return p.pError("unterminated string found")
+		}
+		c := buf[offset]
+		switch c {
+		case '\\':
+			offset++
+			switch buf[offset] {
+			case '\\', '/', '"':
+				offset++
+			case 't':
+				offset++
+			case 'n':
+				offset++
+			case 'r':
+				offset++
+			case 'b':
+				offset++
+			case 'f':
+				offset++
+			case 'u':
+				offset++
+				if len(buf)-offset < 4 {
+					return p.pError("unexpected EOF after '\\u'")
+				}
+				r, err := strconv.ParseInt(string(buf[offset:offset+4]), 16, 0)
+				if err != nil {
+					return p.pError("invalid (non-hex) character occurs after '\\u' inside string.")
+				}
+				offset--
+				// is this a utf16 surrogate marker?
+				surrogateSize := 0
+				if (r & 0xFC00) == 0xD800 {
+					// point just past end of first
+					toff := offset + 5
+					// enough buffer for second utf16 codepoint?
+					if len(buf) <= (toff + 6) {
+						r = '?' // not enough buffer
+					} else if buf[toff] != '\\' || buf[toff+1] != 'u' {
+						r = '?' // surrogate marker not followed by codepoint
+					} else {
+						surrogate, err := strconv.ParseInt(string(buf[toff+2:toff+6]), 16, 0)
+						if err != nil {
+							r = '?' // invalid hex in second member of pair
+						} else {
+							surrogateSize = 6
+							r = (((r & 0x3F) << 10) | ((((r >> 6) & 0xF) + 1) << 16) | (surrogate & 0x3FF))
+						}
+					}
+				}
+				offset += 5 + surrogateSize
+			default:
+				// bogus escape
+				p.i += offset
+				return p.pError("inside a string, '\\' occurs before a character which it may not")
+			}
+		case '"':
+			p.i = offset + 1
+			return nil
+		default:
+			if c >= 0x20 {
+				offset++
+			} else {
+				p.i += offset
+				return p.pError("invalid character inside string")
+			}
+		}
+	}
+	return p.pError("unterminated string found")
 }
 
 // The Error object is provided by the Parser when an error is encountered.
@@ -361,7 +535,44 @@ func (p *Parser) send(t Type, v []byte) {
 	} else {
 		p.cb(t, nil, v)
 	}
+}
 
+func (p *Parser) skipSection(scan func([]byte, int) int, open,close byte) error {
+	// we just skipped the '{'
+	start := p.i - 1
+	p.skipSpace()
+	in := 1
+	offset := p.i
+	buf := p.buf
+	for len(buf) > offset && in > 0 {
+		offset += scan(buf, offset)
+		if buf[offset] == open {
+			offset++
+			in++
+		} else if buf[offset] == close {
+			offset++
+			in--
+		} else if buf[offset] == '"' {
+			p.i = offset
+			if err := p.skipString(); err != nil {
+				return err
+			}
+			offset = p.i
+		}
+	}
+
+	p.i = offset
+	p.cb(SkippedData, nil, buf[start:offset])
+	p.s = sValueEnd
+	return nil
+}
+
+func (p *Parser) skipObject() error {
+	return p.skipSection(scanBraces, '{','}')
+}
+
+func (p *Parser) skipArray() error {
+	return p.skipSection(scanBrackets, '[',']')
 }
 
 // NewParser - Allocate a new JSON Scanner that may be re-used.
@@ -374,12 +585,20 @@ func NewParser() *Parser {
 		sValue,
 		nil,
 		nil,
+		scanNumberCharsGo,
+		scanNonSpecialStringCharsGo,
 	}
+}
+
+// recordNearPage returns true if the end of the record is within 15 bytes of the end of a page
+func recordNearPage(buf []byte) bool {
+	hdr := (*reflect.SliceHeader)(unsafe.Pointer(&buf))
+	return (hdr.Data+uintptr(hdr.Len)-1)&(PageSize-1) >= PageSize-15
 }
 
 // Parse parses a complete JSON document. Callback will be invoked once
 // for each JSON entity found.
-func (p *Parser) Parse(buf []byte, cb Callback) error {
+func (p *Parser) Parse(buf []byte, cb Callback) (err error) {
 	p.buf = buf
 	p.i = 0
 	p.s = sValue
@@ -387,7 +606,15 @@ func (p *Parser) Parse(buf []byte, cb Callback) error {
 	p.states = p.states[:0]
 	p._cb = cb
 	depth := 0
-
+	if hasAsm() {
+		if recordNearPage(buf) {
+			p.scanNonSpecialStringChars = scanNonSpecialStringCharsGo
+			p.scanNumberChars = scanNumberCharsGo
+		} else {
+			p.scanNonSpecialStringChars = scanNonSpecialStringCharsASM
+			p.scanNumberChars = scanNumberCharsASM
+		}
+	} // else we don't have to ever worry about that.
 scan:
 	for len(buf) > p.i {
 		switch p.s {
@@ -439,12 +666,16 @@ scan:
 				depth++
 				p.i++
 				p.send(Object, nil)
-				p.pushState(sObject)
+				if !p.s.isSkipping() {
+					p.pushState(sObject)
+				}
 			case '[':
 				depth++
 				p.i++
 				p.send(Array, nil)
-				p.pushState(sArray)
+				if !p.s.isSkipping() {
+					p.pushState(sArray)
+				}
 			case '"':
 				var v []byte
 				var err error
@@ -554,6 +785,14 @@ scan:
 			}
 		case sClientCancelledParse:
 			return ClientCancelledParse
+		case sClientSkippingObject:
+			if err = p.skipObject(); err != nil {
+				return err
+			}
+		case sClientSkippingArray:
+			if err = p.skipArray(); err != nil {
+				return err
+			}
 		default:
 			return p.pError(fmt.Sprintf("hit unimplemented state: %v", p.s))
 		}

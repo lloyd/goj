@@ -40,8 +40,8 @@ func BenchmarkGojScanning(b *testing.B) {
 	}
 	parser := goj.NewParser()
 	for i := 0; i < b.N; i++ {
-		err := parser.Parse([]byte(codeJSON), func(t goj.Type, k []byte, v []byte) bool {
-			return true
+		err := parser.Parse([]byte(codeJSON), func(t goj.Type, k []byte, v []byte) goj.Action {
+			return goj.Continue
 		})
 		if err != nil {
 			b.Fatal("Scanning:", err)

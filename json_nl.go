@@ -21,8 +21,11 @@ func ReadJSONNL(s io.Reader, cb func(t Type, key []byte, value []byte, line int6
 	var line []byte
 	parser := NewParser()
 	for line, err = reader.ReadSlice('\n'); err == nil; line, err = reader.ReadSlice('\n') {
-		err := parser.Parse(line, func(t Type, k []byte, v []byte) bool {
-			return cb(t, k, v, lineNumber)
+		err := parser.Parse(line, func(t Type, k []byte, v []byte) Action {
+			if cb(t, k, v, lineNumber) {
+				return Continue
+			}
+			return Cancel
 		})
 		if err != nil {
 			break
@@ -33,13 +36,19 @@ func ReadJSONNL(s io.Reader, cb func(t Type, key []byte, value []byte, line int6
 	if err == io.EOF {
 		err = nil
 		if len(line) > 0 {
-			err = parser.Parse(line, func(t Type, k []byte, v []byte) bool {
-				return cb(t, k, v, lineNumber)
+			err = parser.Parse(line, func(t Type, k []byte, v []byte) Action {
+				if cb(t, k, v, lineNumber) {
+					return Continue
+				}
+				return Cancel
 			})
 		}
 	} else {
-		err = parser.Parse(line, func(t Type, k []byte, v []byte) bool {
-			return cb(t, k, v, lineNumber)
+		err = parser.Parse(line, func(t Type, k []byte, v []byte) Action {
+			if cb(t, k, v, lineNumber) {
+				return Continue
+			}
+			return Cancel
 		})
 	}
 	return err
