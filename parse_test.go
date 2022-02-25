@@ -49,7 +49,7 @@ func getTests(t *testing.T) []*parseTestCase {
 
 		// only allow .json, .gold
 		if ext != ".json" && ext != ".gold" {
-			//t.Log("WARNING: unsupported suffix, ignoring file:", p)
+			t.Log("WARNING: unsupported suffix, ignoring file:", p)
 			return nil
 		}
 		// relativize and hack off ext to get name
