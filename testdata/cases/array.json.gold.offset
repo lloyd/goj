@@ -1,0 +1,20 @@
+array: 0 -1
+string: 1 6
+string: 9 14
+string: 16 21
+true: 24 28
+false: 29 34
+null: 35 39
+object: 40 -1
+key: 'key'
+string: 47 54
+object end: -1 55
+array: 58 -1
+null: 59 63
+null: 64 68
+null: 69 73
+array: 74 -1
+array end: -1 76
+array end: -1 77
+string: 80 88
+array end: -1 90

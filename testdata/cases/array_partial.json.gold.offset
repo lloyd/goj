@@ -1,0 +1,10 @@
+object: 0 -1
+key: 'nodes'
+array: 9 -1
+integer: 10 11
+integer: 12 13
+integer: 14 15
+integer: 16 17
+integer: 18 19
+integer: 20 21
+parse error: premature EOF

@@ -5,7 +5,7 @@
 // license that can be found in the LICENSE file at
 // https://github.com/golang/go
 
-package test
+package goj_test
 
 import (
 	"encoding/json"
@@ -19,7 +19,7 @@ import (
 var codeJSON []byte
 
 func codeInit() {
-	f, err := os.Open("./code.json")
+	f, err := os.Open("testdata/code.json")
 	if err != nil {
 		panic(err)
 	}

@@ -171,17 +171,18 @@ type Callback func(what Type, key []byte, value []byte) Action
 type Parser struct {
 	buf                       []byte
 	i                         int
-	keystack                  [][]byte
+	keyStack                  [][]byte
 	states                    []state
 	s                         state
-	_cb                       Callback
+	callback                  Callback
+	offsetCallback            OffsetCallback
 	cookedBuf                 []byte
 	scanNumberChars           func(s []byte, offset int) int
 	scanNonSpecialStringChars func(s []byte, offset int) int
 }
 
 func (p *Parser) cb(t Type, k, v []byte) {
-	ok := p._cb(t, k, v)
+	ok := p.callback(t, k, v)
 	switch ok {
 	case Continue:
 	case Cancel:
@@ -334,53 +335,11 @@ func (p *Parser) readString() ([]byte, bool, error) {
 }
 
 func (p *Parser) readNumber() ([]byte, Type, error) {
-	start := p.i
-	t := Integer
-
-	if len(p.buf) > p.i {
-		switch p.buf[p.i] {
-		case '-':
-			t = NegInteger
-			p.i++
-			x := p.scanNumberChars(p.buf, p.i)
-			if x == 0 {
-				return nil, t, p.pError("malformed number, a digit is required after the minus sign")
-			}
-			p.i += x
-		case '0':
-			p.i++
-		case '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			p.i += p.scanNumberChars(p.buf, p.i)
-		}
-		if p.i == start {
-			return nil, t, p.pError("number expected")
-		}
-		if len(p.buf) > p.i && p.buf[p.i] == '.' {
-			t = Float
-			p.i++
-			x := p.scanNumberChars(p.buf, p.i)
-			if x == 0 {
-				return nil, t, p.pError("digit expected after decimal point")
-			}
-			p.i += x
-		}
-
-		// now handle scentific notation suffix
-		if len(p.buf) > p.i && (p.buf[p.i] == 'e' || p.buf[p.i] == 'E') {
-			t = Float
-			p.i++
-			if len(p.buf) > p.i && (p.buf[p.i] == '-' || p.buf[p.i] == '+') {
-				p.i++
-			}
-			x := p.scanNumberChars(p.buf, p.i)
-			if x == 0 {
-				return nil, t, p.pError("digits expected after exponent marker (e)")
-			}
-			p.i += x
-
-		}
+	start, end, t, err := p.readNumberOffset()
+	if err != nil {
+		return nil, t, err
 	}
-	return p.buf[start:p.i], t, nil
+	return p.buf[start:end], t, nil
 }
 
 func (p *Parser) skipString() error {
@@ -527,17 +486,17 @@ func (p *Parser) send(t Type, v []byte) {
 	states := p.states
 	slen := len(states)
 	if slen > 0 && states[slen-1] == sObject {
-		keystack := p.keystack
+		keystack := p.keyStack
 		off := len(keystack) - 1
 		k := keystack[off]
-		p.keystack = keystack[:off]
+		p.keyStack = keystack[:off]
 		p.cb(t, k, v)
 	} else {
 		p.cb(t, nil, v)
 	}
 }
 
-func (p *Parser) skipSection(scan func([]byte, int) int, open,close byte) error {
+func (p *Parser) skipSection(scan func([]byte, int) int, open, close byte) error {
 	// we just skipped the '{'
 	start := p.i - 1
 	p.skipSpace()
@@ -568,25 +527,21 @@ func (p *Parser) skipSection(scan func([]byte, int) int, open,close byte) error 
 }
 
 func (p *Parser) skipObject() error {
-	return p.skipSection(scanBraces, '{','}')
+	return p.skipSection(scanBraces, '{', '}')
 }
 
 func (p *Parser) skipArray() error {
-	return p.skipSection(scanBrackets, '[',']')
+	return p.skipSection(scanBrackets, '[', ']')
 }
 
 // NewParser - Allocate a new JSON Scanner that may be re-used.
 func NewParser() *Parser {
 	return &Parser{
-		nil,
-		0,
-		make([][]byte, 0, 4),
-		make([]state, 0, 4),
-		sValue,
-		nil,
-		nil,
-		scanNumberCharsGo,
-		scanNonSpecialStringCharsGo,
+		keyStack:                  make([][]byte, 0, 4),
+		states:                    make([]state, 0, 4),
+		s:                         sValue,
+		scanNumberChars:           scanNumberCharsGo,
+		scanNonSpecialStringChars: scanNonSpecialStringCharsGo,
 	}
 }
 
@@ -602,9 +557,9 @@ func (p *Parser) Parse(buf []byte, cb Callback) (err error) {
 	p.buf = buf
 	p.i = 0
 	p.s = sValue
-	p.keystack = p.keystack[:0]
+	p.keyStack = p.keyStack[:0]
 	p.states = p.states[:0]
-	p._cb = cb
+	p.callback = cb
 	depth := 0
 	if hasAsm() {
 		if recordNearPage(buf) {
@@ -780,7 +735,7 @@ scan:
 					copy(buf, k)
 					k = buf
 				}
-				p.keystack = append(p.keystack, k)
+				p.keyStack = append(p.keyStack, k)
 				p.s = sValue
 			}
 		case sClientCancelledParse:
