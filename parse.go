@@ -53,11 +53,6 @@ const (
 	Skip
 )
 
-// ASM optimized scanning routines
-func hasAsm() bool
-func scanNumberCharsASM(s []byte, offset int) int
-func scanNonSpecialStringCharsASM(s []byte, offset int) int
-
 //go:nosplit
 func scanNonSpecialStringCharsGo(s []byte, offset int) (x int) {
 	for i, c := range s[offset:] {
@@ -77,9 +72,6 @@ func scanNumberCharsGo(s []byte, offset int) (x int) {
 	}
 	return len(s) - offset
 }
-
-func scanBraces(s []byte, offset int) int
-func scanBrackets(s []byte, offset int) int
 
 //go:nosplit
 func scanBracesGo(s []byte, offset int) int {
@@ -521,17 +513,14 @@ func (p *Parser) skipSection(scan func([]byte, int) int, open, close byte) error
 	}
 
 	p.i = offset
-	p.cb(SkippedData, nil, buf[start:offset])
+	if p.callback != nil {
+		p.cb(SkippedData, nil, buf[start:offset])
+	}
+	if p.offsetCallback != nil {
+		p.ocb(SkippedData, nil, start, offset)
+	}
 	p.s = sValueEnd
 	return nil
-}
-
-func (p *Parser) skipObject() error {
-	return p.skipSection(scanBraces, '{', '}')
-}
-
-func (p *Parser) skipArray() error {
-	return p.skipSection(scanBrackets, '[', ']')
 }
 
 // NewParser - Allocate a new JSON Scanner that may be re-used.
