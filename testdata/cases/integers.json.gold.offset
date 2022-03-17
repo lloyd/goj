@@ -1,0 +1,13 @@
+array: 0 -1
+integer: 2 3
+integer: 4 5
+integer: 6 7
+integer: 8 9
+integer: 10 11
+integer: 12 13
+integer: 14 15
+integer: 19 28
+negative integer: 31 41
+integer: 45 55
+negative integer: 57 68
+array end: -1 70

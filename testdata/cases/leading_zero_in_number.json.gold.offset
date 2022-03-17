@@ -1,0 +1,4 @@
+object: 0 -1
+key: 'bad thing'
+integer: 15 16
+parse error: after key and value, inside map, I expect ',' or '}'

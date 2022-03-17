@@ -5,7 +5,7 @@
 // license that can be found in the LICENSE file at
 // https://github.com/golang/go
 
-package test
+package goj_test
 
 import (
 	"encoding/json"
@@ -19,7 +19,7 @@ import (
 var codeJSON []byte
 
 func codeInit() {
-	f, err := os.Open("./code.json")
+	f, err := os.Open("testdata/code.json")
 	if err != nil {
 		panic(err)
 	}
@@ -40,11 +40,29 @@ func BenchmarkGojScanning(b *testing.B) {
 	}
 	parser := goj.NewParser()
 	for i := 0; i < b.N; i++ {
-		err := parser.Parse([]byte(codeJSON), func(t goj.Type, k []byte, v []byte) goj.Action {
+		err := parser.Parse(codeJSON, func(t goj.Type, k []byte, v []byte) goj.Action {
 			return goj.Continue
 		})
 		if err != nil {
 			b.Fatal("Scanning:", err)
+		}
+	}
+	b.SetBytes(int64(len(codeJSON)))
+}
+
+func BenchmarkGojOffsetScanning(b *testing.B) {
+	if codeJSON == nil {
+		b.StopTimer()
+		codeInit()
+		b.StartTimer()
+	}
+	parser := goj.NewParser()
+	for i := 0; i < b.N; i++ {
+		err := parser.OffsetParse(codeJSON, func(t goj.Type, k []byte, s, e int) goj.Action {
+			return goj.Continue
+		})
+		if err != nil {
+			b.Fatal("Offset scanning:", err)
 		}
 	}
 	b.SetBytes(int64(len(codeJSON)))

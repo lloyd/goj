@@ -1,7 +1,6 @@
-package test
+package goj_test
 
 import (
-	"testing"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -9,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"testing"
 
 	"github.com/lloyd/goj"
 )
@@ -33,11 +33,11 @@ func (jtc parseTestCases) Swap(i, j int) {
 	jtc[i], jtc[j] = jtc[j], jtc[i]
 }
 
-func getTests() []*parseTestCase {
+func getTests(t *testing.T) []*parseTestCase {
+	t.Helper()
+
 	tests := make(map[string]*parseTestCase)
-
-	pathToTestCases := "./cases"
-
+	pathToTestCases := "testdata/cases"
 	filepath.Walk(pathToTestCases, func(p string, info os.FileInfo, err error) error {
 		// skip '^.', '~$', and non-files
 		if strings.HasPrefix(path.Base(p), ".") || strings.HasSuffix(p, "~") || strings.HasSuffix(p, "#") || info.IsDir() {
@@ -49,7 +49,7 @@ func getTests() []*parseTestCase {
 
 		// only allow .json, .gold
 		if ext != ".json" && ext != ".gold" {
-			fmt.Println("WARNING: unsupported suffix, ignoring file:", p)
+			t.Log("WARNING: unsupported suffix, ignoring file:", p)
 			return nil
 		}
 		// relativize and hack off ext to get name
@@ -144,7 +144,7 @@ func testParse(json string) (results string) {
 }
 
 func TestParser(t *testing.T) {
-	cases := getTests()
+	cases := getTests(t)
 
 	for _, c := range cases {
 		results := testParse(c.json)

@@ -1,0 +1,7 @@
+array: 0 -1
+float: 1 23
+float: 25 30
+float: 32 37
+float: 39 44
+float: 46 51
+array end: -1 52

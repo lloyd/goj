@@ -1,0 +1,9 @@
+array: 0 -1
+string: 1 7
+string: 8 12
+string: 13 19
+string: 20 28
+string: 29 33
+string: 36 57
+string: 60 94
+parse error: invalid string in json text.

@@ -1,0 +1,35 @@
+object: 0 -1
+key: 'glossary'
+object: 14 -1
+key: 'title'
+string: 25 43
+key: 'GlossDiv'
+object: 57 -1
+key: 'title'
+string: 68 71
+key: 'GlossList'
+array: 86 -1
+object: 88 -1
+key: 'ID'
+string: 96 102
+key: 'SortAs'
+string: 114 120
+key: 'GlossTerm'
+string: 135 173
+key: 'Acronym'
+string: 186 192
+key: 'Abbrev'
+string: 204 219
+key: 'GlossDef'
+string: 233 307
+key: 'GlossSeeAlso'
+array: 325 -1
+string: 326 331
+string: 333 338
+string: 340 348
+array end: -1 349
+object end: -1 351
+array end: -1 353
+object end: -1 355
+object end: -1 357
+object end: -1 359
