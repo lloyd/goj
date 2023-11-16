@@ -53,11 +53,6 @@ const (
 	Skip
 )
 
-// ASM optimized scanning routines
-func hasAsm() bool
-func scanNumberCharsASM(s []byte, offset int) int
-func scanNonSpecialStringCharsASM(s []byte, offset int) int
-
 //go:nosplit
 func scanNonSpecialStringCharsGo(s []byte, offset int) (x int) {
 	for i, c := range s[offset:] {
@@ -78,8 +73,6 @@ func scanNumberCharsGo(s []byte, offset int) (x int) {
 	return len(s) - offset
 }
 
-func scanBraces(s []byte, offset int) int
-func scanBrackets(s []byte, offset int) int
 
 //go:nosplit
 func scanBracesGo(s []byte, offset int) int {
